@@ -1,6 +1,6 @@
 import express, { type Request } from "express";
 import { createServer } from "node:http";
-import { atrium } from "@ohmaseclaro/atrium-server";
+import { atrium } from "@atriumjs/atrium-server";
 
 const app = express();
 const workerDialBase = process.env.ATRIUM_WORKER_DIAL_BASE ?? "ws://127.0.0.1:7070";

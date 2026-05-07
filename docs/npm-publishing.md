@@ -1,22 +1,22 @@
 # Publishing Atrium to npm
 
-Atrium publishes as a small set of public scoped packages under `@ohmaseclaro/atrium-*`.
+Atrium publishes as a small set of public scoped packages under `@atriumjs/atrium-*`.
 
 ## Public packages
 
 | Package            | Purpose                                                           |
 | ------------------ | ----------------------------------------------------------------- |
-| `@ohmaseclaro/atrium-protocol` | Shared Zod schemas and TypeScript wire types.                     |
-| `@ohmaseclaro/atrium-server`   | Express middleware, HTTP session API, and viewer WebSocket relay. |
-| `@ohmaseclaro/atrium-react`    | Embeddable React `<RemoteBrowser />` viewer.                      |
-| `@ohmaseclaro/atrium-worker`   | Playwright/Chromium worker plus `atrium-worker` binary.           |
-| `@ohmaseclaro/atrium-cli`      | Developer CLI entrypoint (`atrium`).                              |
+| `@atriumjs/atrium-protocol` | Shared Zod schemas and TypeScript wire types.                     |
+| `@atriumjs/atrium-server`   | Express middleware, HTTP session API, and viewer WebSocket relay. |
+| `@atriumjs/atrium-react`    | Embeddable React `<RemoteBrowser />` viewer.                      |
+| `@atriumjs/atrium-worker`   | Playwright/Chromium worker plus `atrium-worker` binary.           |
+| `@atriumjs/atrium-cli`      | Developer CLI entrypoint (`atrium`).                              |
 
-`@ohmaseclaro/atrium-demo` stays private and is not published.
+`@atriumjs/atrium-demo` stays private and is not published.
 
 ## Before the first publish
 
-1. Log in as the npm user that owns the **`@ohmaseclaro`** scope (your npm username). Scoped packages under `@ohmaseclaro/...` publish with `--access public` on first publish.
+1. Log in as an npm user or organization that owns the **`@atriumjs`** scope. Scoped packages under `@atriumjs/...` publish with `--access public` on first publish.
 2. Log in with an account that can publish public scoped packages:
 
 ```bash
@@ -27,11 +27,11 @@ npm whoami
 3. Confirm package names are available:
 
 ```bash
-npm view @ohmaseclaro/atrium-protocol version
-npm view @ohmaseclaro/atrium-server version
-npm view @ohmaseclaro/atrium-react version
-npm view @ohmaseclaro/atrium-worker version
-npm view @ohmaseclaro/atrium-cli version
+npm view @atriumjs/atrium-protocol version
+npm view @atriumjs/atrium-server version
+npm view @atriumjs/atrium-react version
+npm view @atriumjs/atrium-worker version
+npm view @atriumjs/atrium-cli version
 ```
 
 If npm returns `404`, the package name is still unpublished.
@@ -50,12 +50,12 @@ pnpm publish:check
 Inspect a tarball if needed:
 
 ```bash
-tar -tf .packs/ohmaseclaro-atrium-protocol-*.tgz
+tar -tf .packs/atriumjs-atrium-protocol-*.tgz
 ```
 
 ## Publish order
 
-Publish `@ohmaseclaro/atrium-protocol` first because other packages depend on it. Then publish the packages that consume it.
+Publish `@atriumjs/atrium-protocol` first because other packages depend on it. Then publish the packages that consume it.
 
 ```bash
 pnpm --dir packages/protocol publish --access public
@@ -71,8 +71,8 @@ For a future all-at-once release, `pnpm -r publish --access public` is acceptabl
 
 **Do not commit tokens.** Never put an npm token in the repo, in `.npmrc` checked into git, or in client-side env files.
 
-1. **Create a token on npm** (logged in as `ohmaseclaro` or an org bot with publish rights to `@ohmaseclaro`):
-   - Prefer **Granular Access Token**: npm → Access Tokens → Generate New Token → type **Granular** → select only the five `@ohmaseclaro/atrium-*` packages (or the whole `@ohmaseclaro` scope if you accept broader blast radius) → enable **Read and write** for those packages → under **Packages and scopes**, ensure **Publish** is allowed.
+1. **Create a token on npm** (logged in as an account or org bot with publish rights to **`@atriumjs`**):
+   - Prefer **Granular Access Token**: npm → Access Tokens → Generate New Token → type **Granular** → select only the five `@atriumjs/atrium-*` packages (or the whole `@atriumjs` scope if you accept broader blast radius) → enable **Read and write** for those packages → under **Packages and scopes**, ensure **Publish** is allowed.
    - Legacy **Automation** tokens still work for non-interactive publish; rotate them periodically.
 
 2. **Store it only as a GitHub secret**: repository **Settings → Secrets and variables → Actions → New repository secret**. Name: **`NPM_TOKEN`**. Paste the token once; GitHub encrypts it and only injects it into workflows you configure.
@@ -86,11 +86,11 @@ For a future all-at-once release, `pnpm -r publish --access public` is acceptabl
 For now, keep versions aligned across the public packages. A simple release should bump all five public packages to the same version before publishing.
 
 ```bash
-pnpm --filter @ohmaseclaro/atrium-protocol version patch --no-git-tag-version
-pnpm --filter @ohmaseclaro/atrium-server version patch --no-git-tag-version
-pnpm --filter @ohmaseclaro/atrium-react version patch --no-git-tag-version
-pnpm --filter @ohmaseclaro/atrium-worker version patch --no-git-tag-version
-pnpm --filter @ohmaseclaro/atrium-cli version patch --no-git-tag-version
+pnpm --filter @atriumjs/atrium-protocol version patch --no-git-tag-version
+pnpm --filter @atriumjs/atrium-server version patch --no-git-tag-version
+pnpm --filter @atriumjs/atrium-react version patch --no-git-tag-version
+pnpm --filter @atriumjs/atrium-worker version patch --no-git-tag-version
+pnpm --filter @atriumjs/atrium-cli version patch --no-git-tag-version
 ```
 
 Commit the version bump, tag the release, then publish.
@@ -98,17 +98,17 @@ Commit the version bump, tag the release, then publish.
 ## Post-publish smoke checks
 
 ```bash
-npm view @ohmaseclaro/atrium-protocol version
-npm view @ohmaseclaro/atrium-server version
-npm view @ohmaseclaro/atrium-react version
-npm view @ohmaseclaro/atrium-worker version
-npm view @ohmaseclaro/atrium-cli version
+npm view @atriumjs/atrium-protocol version
+npm view @atriumjs/atrium-server version
+npm view @atriumjs/atrium-react version
+npm view @atriumjs/atrium-worker version
+npm view @atriumjs/atrium-cli version
 ```
 
 Create a clean scratch app and install the intended production pieces:
 
 ```bash
-pnpm add express @ohmaseclaro/atrium-server @ohmaseclaro/atrium-react @ohmaseclaro/atrium-worker
+pnpm add express @atriumjs/atrium-server @atriumjs/atrium-react @atriumjs/atrium-worker
 pnpm exec playwright install chromium
 ```
 
@@ -117,3 +117,15 @@ The worker binary should be available as:
 ```bash
 pnpm exec atrium-worker
 ```
+
+## GitHub repository URL
+
+`package.json` **repository**, **bugs**, and **homepage** fields assume **`https://github.com/atriumjs/atrium`**. After the repo exists under that URL, point your local clone at it:
+
+```bash
+git remote set-url origin https://github.com/atriumjs/atrium.git
+```
+
+To **rename** a repo you keep under the same owner: GitHub **Settings → General → Repository name**, or `gh repo rename <new-name> --repo <owner>/<current>`.
+
+To **move** to the `atriumjs` organization, use **Settings → Danger zone → Transfer ownership** (issues, PRs, and stars move with the repo). Prefer transfer over delete-and-recreate unless you intentionally want a clean slate.

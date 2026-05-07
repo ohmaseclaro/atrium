@@ -20,8 +20,8 @@ import type {
   ClientMessage,
   ControlHolder,
   ControlState,
-} from "@ohmaseclaro/atrium-protocol";
-import { parseClientMessage } from "@ohmaseclaro/atrium-protocol";
+} from "@atriumjs/atrium-protocol";
+import { parseClientMessage } from "@atriumjs/atrium-protocol";
 
 /** Decoded client cert ready to hand to Playwright `newContext({ clientCertificates })`. */
 type ClientCertificateRuntime = {

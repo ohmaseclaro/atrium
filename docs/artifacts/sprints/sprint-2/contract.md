@@ -8,7 +8,7 @@
 
 ## Out of scope
 
-- BullMQ consumer embedded in `@ohmaseclaro/atrium-server` for this milestone.
+- BullMQ consumer embedded in `@atriumjs/atrium-server` for this milestone.
 - Redis cluster hardening.
 
 ## Evidence matrix

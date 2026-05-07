@@ -1,17 +1,17 @@
 {
-  "name": "@ohmaseclaro/atrium-cli",
+  "name": "@atriumjs/atrium-cli",
   "version": "0.1.0",
   "description": "Developer utilities for the Atrium monorepo (placeholders for local stack helpers)",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ohmaseclaro/atrium.git",
+    "url": "git+https://github.com/atriumjs/atrium.git",
     "directory": "packages/cli"
   },
   "bugs": {
-    "url": "https://github.com/ohmaseclaro/atrium/issues"
+    "url": "https://github.com/atriumjs/atrium/issues"
   },
-  "homepage": "https://github.com/ohmaseclaro/atrium/tree/main/packages/cli#readme",
+  "homepage": "https://github.com/atriumjs/atrium/tree/main/packages/cli#readme",
   "keywords": [
     "atrium",
     "remote-browser",

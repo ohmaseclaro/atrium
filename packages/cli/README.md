@@ -1,4 +1,4 @@
-# @ohmaseclaro/atrium-cli
+# @atriumjs/atrium-cli
 
 Lightweight **CLI** entrypoint for the Atrium monorepo (`atrium` on your `PATH` when linked or run via `pnpm exec`).
 
@@ -13,22 +13,22 @@ Lightweight **CLI** entrypoint for the Atrium monorepo (`atrium` on your `PATH` 
 From npm:
 
 ```bash
-npm install --save-dev @ohmaseclaro/atrium-cli
+npm install --save-dev @atriumjs/atrium-cli
 npx atrium doctor
 ```
 
-With pnpm: `pnpm add -D @ohmaseclaro/atrium-cli`, then `pnpm exec atrium doctor`.
+With pnpm: `pnpm add -D @atriumjs/atrium-cli`, then `pnpm exec atrium doctor`.
 
 From the monorepo root:
 
 ```bash
-pnpm --filter @ohmaseclaro/atrium-cli exec atrium doctor
+pnpm --filter @atriumjs/atrium-cli exec atrium doctor
 ```
 
 ## Build
 
 ```bash
-pnpm --filter @ohmaseclaro/atrium-cli run build
+pnpm --filter @atriumjs/atrium-cli run build
 ```
 
 MIT — see repository [`LICENSE`](../../LICENSE).

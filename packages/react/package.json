@@ -1,17 +1,17 @@
 {
-  "name": "@ohmaseclaro/atrium-react",
+  "name": "@atriumjs/atrium-react",
   "version": "0.1.0",
   "description": "React UI for embedding Atrium remote browser sessions",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ohmaseclaro/atrium.git",
+    "url": "git+https://github.com/atriumjs/atrium.git",
     "directory": "packages/react"
   },
   "bugs": {
-    "url": "https://github.com/ohmaseclaro/atrium/issues"
+    "url": "https://github.com/atriumjs/atrium/issues"
   },
-  "homepage": "https://github.com/ohmaseclaro/atrium/tree/main/packages/react#readme",
+  "homepage": "https://github.com/atriumjs/atrium/tree/main/packages/react#readme",
   "keywords": [
     "atrium",
     "remote-browser",
@@ -47,7 +47,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ohmaseclaro/atrium-protocol": "workspace:*"
+    "@atriumjs/atrium-protocol": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

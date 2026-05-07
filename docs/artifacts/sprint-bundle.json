@@ -56,7 +56,7 @@
             "id": "T1",
             "title": "Protocol schemas for wire messages",
             "doneWhen": "Zod schemas cover server and client envelopes used by skeleton and dist builds clean.",
-            "evidenceRequired": "pnpm --filter @ohmaseclaro/atrium-protocol build and Vitest protocol suite green.",
+            "evidenceRequired": "pnpm --filter @atriumjs/atrium-protocol build and Vitest protocol suite green.",
             "dependencies": [],
             "riskNotes": ""
           },

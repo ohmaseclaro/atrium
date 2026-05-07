@@ -1,17 +1,17 @@
 {
-  "name": "@ohmaseclaro/atrium-server",
+  "name": "@atriumjs/atrium-server",
   "version": "0.1.0",
   "description": "Express-compatible middleware for Atrium remote browser sessions (API dials workers)",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ohmaseclaro/atrium.git",
+    "url": "git+https://github.com/atriumjs/atrium.git",
     "directory": "packages/server"
   },
   "bugs": {
-    "url": "https://github.com/ohmaseclaro/atrium/issues"
+    "url": "https://github.com/atriumjs/atrium/issues"
   },
-  "homepage": "https://github.com/ohmaseclaro/atrium/tree/main/packages/server#readme",
+  "homepage": "https://github.com/atriumjs/atrium/tree/main/packages/server#readme",
   "keywords": [
     "atrium",
     "remote-browser",
@@ -47,7 +47,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ohmaseclaro/atrium-protocol": "workspace:*",
+    "@atriumjs/atrium-protocol": "workspace:*",
     "ws": "^8.18.0"
   },
   "devDependencies": {

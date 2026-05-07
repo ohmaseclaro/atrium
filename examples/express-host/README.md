@@ -1,6 +1,6 @@
-# @ohmaseclaro/atrium-example-express-host
+# @atriumjs/atrium-example-express-host
 
-Minimal **Express** server that mounts **`@ohmaseclaro/atrium-server`** only (no bundled React UI). Defaults match the root [`README.md`](../../README.md).
+Minimal **Express** server that mounts **`@atriumjs/atrium-server`** only (no bundled React UI). Defaults match the root [`README.md`](../../README.md).
 
 **Read next:** [npm quick start](../../docs/quick-start.md) · [User guide — Embed the API](../../docs/user-guide.md#3-embed-the-api-atriumserver) · [Documentation hub](../../docs/README.md)
 
@@ -9,7 +9,7 @@ Minimal **Express** server that mounts **`@ohmaseclaro/atrium-server`** only (no
 - You already have a frontend (or server-driven UI) and only need the **REST + WebSocket upgrade** surface.
 - You want the smallest runnable host to **`curl`** against while a worker runs separately.
 
-For the **full interactive demo** (Vite + React + optional browser chrome + multi-tab), use [`@ohmaseclaro/atrium-demo`](../../packages/demo/README.md) instead:
+For the **full interactive demo** (Vite + React + optional browser chrome + multi-tab), use [`@atriumjs/atrium-demo`](../../packages/demo/README.md) instead:
 
 ```bash
 pnpm demo
@@ -24,12 +24,12 @@ pnpm demo
 ```bash
 # Terminal A — worker
 export ATRIUM_WORKER_SECRET=dev-secret-change-me
-pnpm --filter @ohmaseclaro/atrium-worker start
+pnpm --filter @atriumjs/atrium-worker start
 
 # Terminal B — API host
 export ATRIUM_WORKER_SECRET=dev-secret-change-me
 export ATRIUM_WORKER_DIAL_BASE=ws://127.0.0.1:7070
-pnpm --filter @ohmaseclaro/atrium-example-express-host dev
+pnpm --filter @atriumjs/atrium-example-express-host dev
 ```
 
 Then:
@@ -40,7 +40,7 @@ curl -sS -X POST http://localhost:3000/atrium/sessions \
   -d '{}' | jq .
 ```
 
-Use the returned **`wsUrl`** and **`viewerToken`** with any WebSocket client or embed [`@ohmaseclaro/atrium-react`](../../packages/react/README.md).
+Use the returned **`wsUrl`** and **`viewerToken`** with any WebSocket client or embed [`@atriumjs/atrium-react`](../../packages/react/README.md).
 
 ## WebSocket upgrade
 

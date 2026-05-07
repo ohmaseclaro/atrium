@@ -1,17 +1,17 @@
 {
-  "name": "@ohmaseclaro/atrium-protocol",
+  "name": "@atriumjs/atrium-protocol",
   "version": "0.1.0",
   "description": "Shared wire types and validation for Atrium remote browser sessions",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ohmaseclaro/atrium.git",
+    "url": "git+https://github.com/atriumjs/atrium.git",
     "directory": "packages/protocol"
   },
   "bugs": {
-    "url": "https://github.com/ohmaseclaro/atrium/issues"
+    "url": "https://github.com/atriumjs/atrium/issues"
   },
-  "homepage": "https://github.com/ohmaseclaro/atrium/tree/main/packages/protocol#readme",
+  "homepage": "https://github.com/atriumjs/atrium/tree/main/packages/protocol#readme",
   "keywords": [
     "atrium",
     "remote-browser",

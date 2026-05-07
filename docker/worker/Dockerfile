@@ -10,7 +10,7 @@ RUN corepack enable pnpm
 COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages ./packages
 RUN pnpm install
-RUN pnpm --filter @ohmaseclaro/atrium-protocol build && pnpm --filter @ohmaseclaro/atrium-worker build
+RUN pnpm --filter @atriumjs/atrium-protocol build && pnpm --filter @atriumjs/atrium-worker build
 RUN apt-get update \
   && apt-get install -y --no-install-recommends xvfb xauth \
   && rm -rf /var/lib/apt/lists/*

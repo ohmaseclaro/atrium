@@ -1,4 +1,4 @@
-# Publishes public @ohmaseclaro/atrium-* packages in dependency order.
+# Publishes public @atriumjs/atrium-* packages in dependency order.
 # Configure repository secret NPM_TOKEN (see docs/npm-publishing.md).
 
 name: Publish to npm

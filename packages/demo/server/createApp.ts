@@ -1,7 +1,7 @@
 import express, { type Request } from "express";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
-import { atrium } from "@ohmaseclaro/atrium-server";
+import { atrium } from "@atriumjs/atrium-server";
 
 const DEFAULT_WORKER_DIAL = "ws://127.0.0.1:7070";
 const DEFAULT_SECRET = "dev-secret-change-me";

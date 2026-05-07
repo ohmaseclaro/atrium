@@ -1,17 +1,17 @@
 {
-  "name": "@ohmaseclaro/atrium-worker",
+  "name": "@atriumjs/atrium-worker",
   "version": "0.1.0",
   "description": "Playwright-based browser worker with inbound WebSocket backplane (API dials in)",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ohmaseclaro/atrium.git",
+    "url": "git+https://github.com/atriumjs/atrium.git",
     "directory": "packages/worker"
   },
   "bugs": {
-    "url": "https://github.com/ohmaseclaro/atrium/issues"
+    "url": "https://github.com/atriumjs/atrium/issues"
   },
-  "homepage": "https://github.com/ohmaseclaro/atrium/tree/main/packages/worker#readme",
+  "homepage": "https://github.com/atriumjs/atrium/tree/main/packages/worker#readme",
   "keywords": [
     "atrium",
     "remote-browser",
@@ -51,7 +51,7 @@
     "start:xvfb": "xvfb-run -a --server-args='-screen 0 1920x1080x24 -ac' node dist/run.js"
   },
   "dependencies": {
-    "@ohmaseclaro/atrium-protocol": "workspace:*",
+    "@atriumjs/atrium-protocol": "workspace:*",
     "playwright": "^1.49.1",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",

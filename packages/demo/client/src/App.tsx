@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { RemoteBrowser } from "@ohmaseclaro/atrium-react";
+import { RemoteBrowser } from "@atriumjs/atrium-react";
 
 const DEFAULT_TWEET = "Hello from Atrium X demo — automated post after login.";
 
