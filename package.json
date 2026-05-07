@@ -32,9 +32,10 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "vitest run",
+    "pretest": "pnpm --filter @atriumjs/core build",
     "test:watch": "vitest",
     "clean": "pnpm -r exec rm -rf dist",
-    "pack:check": "rm -rf .packs && mkdir -p .packs && pnpm --dir packages/protocol pack --pack-destination ../../.packs && pnpm --dir packages/express pack --pack-destination ../../.packs && pnpm --dir packages/react pack --pack-destination ../../.packs && pnpm --dir packages/worker pack --pack-destination ../../.packs && pnpm --dir packages/cli pack --pack-destination ../../.packs && pnpm --dir packages/legacy-shims/atrium-protocol pack --pack-destination ../../../.packs && pnpm --dir packages/legacy-shims/atrium-server pack --pack-destination ../../../.packs && pnpm --dir packages/legacy-shims/atrium-react pack --pack-destination ../../../.packs && pnpm --dir packages/legacy-shims/atrium-worker pack --pack-destination ../../../.packs && pnpm --dir packages/legacy-shims/atrium-cli pack --pack-destination ../../../.packs",
+    "pack:check": "rm -rf .packs && mkdir -p .packs && pnpm --dir packages/protocol pack --pack-destination ../../.packs && pnpm --dir packages/core pack --pack-destination ../../.packs && pnpm --dir packages/express pack --pack-destination ../../.packs && pnpm --dir packages/react pack --pack-destination ../../.packs && pnpm --dir packages/worker pack --pack-destination ../../.packs && pnpm --dir packages/cli pack --pack-destination ../../.packs && pnpm --dir packages/legacy-shims/atrium-protocol pack --pack-destination ../../../.packs && pnpm --dir packages/legacy-shims/atrium-server pack --pack-destination ../../../.packs && pnpm --dir packages/legacy-shims/atrium-react pack --pack-destination ../../../.packs && pnpm --dir packages/legacy-shims/atrium-worker pack --pack-destination ../../../.packs && pnpm --dir packages/legacy-shims/atrium-cli pack --pack-destination ../../../.packs",
     "publish:check": "pnpm build && pnpm test && pnpm pack:check",
     "demo": "pnpm --filter @atriumjs/demo dev"
   },

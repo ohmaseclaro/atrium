@@ -22,7 +22,6 @@ describe("atrium HTTP routes", () => {
   it("creates and fetches sessions", async () => {
     const app = express();
     const { router } = atrium({
-      redis: { url: "redis://127.0.0.1:6379" },
       authorize: async (_req: Request) => ({ tenantId: "t", userId: "u" }),
       policies: {
         sessionTtlMs: 60_000,
@@ -44,6 +43,7 @@ describe("atrium HTTP routes", () => {
     expect(created.body.control.holder).toBe("agent");
     expect(created.body.wsUrl).toContain("/atrium/sessions/");
     expect(created.body.wsUrl).toContain("/stream");
+    expect(Array.isArray(created.body.transports)).toBe(true);
 
     await request(app)
       .get(`/atrium/sessions/${created.body.sessionId}`)
@@ -56,7 +56,6 @@ describe("atrium HTTP routes", () => {
   it("returns health and ready payloads", async () => {
     const app = express();
     const { router } = atrium({
-      redis: { url: "redis://127.0.0.1:6379" },
       authorize: async () => ({ tenantId: "t", userId: "u" }),
       policies: {
         sessionTtlMs: 60_000,
@@ -86,7 +85,6 @@ describe("atrium control and navigate", () => {
   it("updates control state", async () => {
     const app = express();
     const { router } = atrium({
-      redis: { url: "redis://127.0.0.1:6379" },
       authorize: async () => ({ tenantId: "t", userId: "u" }),
       policies: {
         sessionTtlMs: 60_000,
@@ -112,7 +110,6 @@ describe("atrium control and navigate", () => {
   it("rejects navigate when URL not allowlisted", async () => {
     const app = express();
     const { router } = atrium({
-      redis: { url: "redis://127.0.0.1:6379" },
       authorize: async () => ({ tenantId: "t", userId: "u" }),
       policies: {
         sessionTtlMs: 60_000,
@@ -138,7 +135,6 @@ describe("atrium DELETE", () => {
   it("requires authorize and removes the session", async () => {
     const app = express();
     const { router } = atrium({
-      redis: { url: "redis://127.0.0.1:6379" },
       authorize: async () => ({ tenantId: "t", userId: "u" }),
       policies: {
         sessionTtlMs: 60_000,
@@ -204,7 +200,6 @@ describe("atrium upgrade relay (integration)", () => {
 
     const expressApp = express();
     const { router, handleViewerUpgrade } = atrium({
-      redis: { url: "redis://127.0.0.1:6379" },
       authorize: async () => ({ tenantId: "t", userId: "u" }),
       policies: {
         sessionTtlMs: 60_000,
@@ -312,7 +307,6 @@ describe("atrium session snapshot and bootstrap", () => {
   it("rejects unknown POST /sessions fields", async () => {
     const app = express();
     const { router } = atrium({
-      redis: { url: "redis://127.0.0.1:6379" },
       authorize: async () => ({ tenantId: "t", userId: "u" }),
       policies: {
         sessionTtlMs: 60_000,
@@ -350,7 +344,6 @@ describe("atrium session snapshot and bootstrap", () => {
 
     const app = express();
     const { router } = atrium({
-      redis: { url: "redis://127.0.0.1:6379" },
       authorize: async () => ({ tenantId: "t", userId: "u" }),
       policies: {
         sessionTtlMs: 60_000,
@@ -394,7 +387,6 @@ describe("atrium session snapshot and bootstrap", () => {
 
     const app = express();
     const { router } = atrium({
-      redis: { url: "redis://127.0.0.1:6379" },
       authorize: async () => ({ tenantId: "t", userId: "u" }),
       policies: {
         sessionTtlMs: 60_000,
@@ -437,7 +429,6 @@ describe("atrium session snapshot and bootstrap", () => {
 
     const app = express();
     const { router } = atrium({
-      redis: { url: "redis://127.0.0.1:6379" },
       authorize: async () => ({ tenantId: "t", userId: "u" }),
       policies: {
         sessionTtlMs: 60_000,
@@ -478,7 +469,6 @@ describe("atrium session snapshot and bootstrap", () => {
 
     const app = express();
     const { router } = atrium({
-      redis: { url: "redis://127.0.0.1:6379" },
       authorize: async () => ({ tenantId: "t", userId: "u" }),
       policies: {
         sessionTtlMs: 60_000,

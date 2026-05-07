@@ -17,7 +17,6 @@ export function createAtriumDemoApp(): AtriumDemoApp {
   const workerSharedSecret = process.env.ATRIUM_WORKER_SECRET ?? DEFAULT_SECRET;
 
   const { router, handleViewerUpgrade } = atrium({
-    redis: { url: process.env.REDIS_URL ?? "redis://127.0.0.1:6379" },
     authorize: async (_req: Request) => ({ tenantId: "demo", userId: "demo-user" }),
     ...(process.env.ATRIUM_WORKER_TLS_INSECURE === "1"
       ? { workerTls: { rejectUnauthorized: false } }

@@ -2,7 +2,7 @@
 
 > Status: Draft
 > Audience: Atrium maintainers
-> Scope: **Package renames (§2) and legacy shims are implemented in this repo.** Remaining work: framework-agnostic `@atriumjs/core`, adapters (Fastify, Hono, Next, NestJS), `@atriumjs/client` / `@atriumjs/sdk`, transport negotiation, `atrium dev`, `demoPolicies()`, etc. Original v0.1 layout used `@atriumjs/atrium-*` on npm; new names are `@atriumjs/*` per the table below.
+> Scope: **Package renames (§2) and legacy shims are implemented.** `@atriumjs/core` (Fetch dispatch, memory store, WS/SSE/poll transports) and the **Express** adapter (`atrium()` → `createAtrium`) are implemented; **not yet in this repo:** Fastify/Hono/Next/Nest adapters, `@atriumjs/client` / `@atriumjs/sdk`, `collect`/`replay`, `mountExpress`, full `demoPolicies` (Turnstile/Tor/Redis Lua), `atrium dev` / `atrium new`, worker `/internal/.../automation`. Original v0.1 layout used `@atriumjs/atrium-*` on npm; new names are `@atriumjs/*` per the table below.
 > Engine architecture (dial pattern, Playwright, CDP screencast, server-authoritative control, snapshot APIs, mTLS, passkey strategy, Xvfb) is **locked** from v0.1 and not relitigated here.
 
 ---

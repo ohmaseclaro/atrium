@@ -4,13 +4,14 @@ Atrium publishes as a small set of public scoped packages under `@atriumjs/*` (f
 
 ## Public packages
 
-| Package              | Purpose                                                           |
-| -------------------- | ----------------------------------------------------------------- |
-| `@atriumjs/protocol` | Shared Zod schemas and TypeScript wire types.                     |
-| `@atriumjs/express`  | Express middleware, HTTP session API, and viewer WebSocket relay. |
-| `@atriumjs/react`    | Embeddable React `<RemoteBrowser />` viewer.                      |
-| `@atriumjs/worker`   | Playwright/Chromium worker plus `atrium-worker` binary.           |
-| `@atriumjs/cli`      | Developer CLI entrypoint (`atrium`).                              |
+| Package              | Purpose                                                          |
+| -------------------- | ---------------------------------------------------------------- |
+| `@atriumjs/protocol` | Shared Zod schemas and TypeScript wire types.                    |
+| `@atriumjs/core`     | Web Fetch session API, transports (WS/SSE/poll), and relay glue. |
+| `@atriumjs/express`  | Express middleware built on `@atriumjs/core`.                    |
+| `@atriumjs/react`    | Embeddable React `<RemoteBrowser />` viewer.                     |
+| `@atriumjs/worker`   | Playwright/Chromium worker plus `atrium-worker` binary.          |
+| `@atriumjs/cli`      | Developer CLI entrypoint (`atrium`).                             |
 
 `@atriumjs/demo` stays private and is not published.
 
@@ -32,6 +33,7 @@ npm whoami
 
 ```bash
 npm view @atriumjs/protocol version
+npm view @atriumjs/core version
 npm view @atriumjs/express version
 npm view @atriumjs/react version
 npm view @atriumjs/worker version
@@ -59,10 +61,11 @@ tar -tf .packs/atriumjs-protocol-*.tgz
 
 ## Publish order
 
-Publish `@atriumjs/protocol` first because other packages depend on it. Then publish the packages that consume it.
+Publish `@atriumjs/protocol` first because other packages depend on it. Publish `@atriumjs/core` next (Express depends on it). Then publish the rest.
 
 ```bash
 pnpm --dir packages/protocol publish --access public
+pnpm --dir packages/core publish --access public
 pnpm --dir packages/express publish --access public
 pnpm --dir packages/react publish --access public
 pnpm --dir packages/worker publish --access public
@@ -86,7 +89,7 @@ For a future all-at-once release, `pnpm -r publish --access public` is acceptabl
 **Do not commit tokens.** Never put an npm token in the repo, in `.npmrc` checked into git, or in client-side env files.
 
 1. **Create a token on npm** (logged in as an account or org bot with publish rights to **`@atriumjs`**):
-   - Prefer **Granular Access Token**: npm → Access Tokens → Generate New Token → type **Granular** → select the five public `@atriumjs/*` packages (or the whole `@atriumjs` scope if you accept broader blast radius) → enable **Read and write** for those packages → under **Packages and scopes**, ensure **Publish** is allowed.
+   - Prefer **Granular Access Token**: npm → Access Tokens → Generate New Token → type **Granular** → select the six public `@atriumjs/*` packages (or the whole `@atriumjs` scope if you accept broader blast radius) → enable **Read and write** for those packages → under **Packages and scopes**, ensure **Publish** is allowed.
    - Legacy **Automation** tokens still work for non-interactive publish; rotate them periodically.
 
 2. **Store it only as a GitHub secret**: repository **Settings → Secrets and variables → Actions → New repository secret**. Name: **`NPM_TOKEN`**. Paste the token once; GitHub encrypts it and only injects it into workflows you configure.
@@ -97,10 +100,11 @@ For a future all-at-once release, `pnpm -r publish --access public` is acceptabl
 
 ## Versioning
 
-For now, keep versions aligned across the public packages. A simple release should bump all five public packages to the same version before publishing.
+For now, keep versions aligned across the public packages. A simple release should bump all six public packages to the same version before publishing.
 
 ```bash
 pnpm --filter @atriumjs/protocol version patch --no-git-tag-version
+pnpm --filter @atriumjs/core version patch --no-git-tag-version
 pnpm --filter @atriumjs/express version patch --no-git-tag-version
 pnpm --filter @atriumjs/react version patch --no-git-tag-version
 pnpm --filter @atriumjs/worker version patch --no-git-tag-version
@@ -113,6 +117,7 @@ Commit the version bump, tag the release, then publish.
 
 ```bash
 npm view @atriumjs/protocol version
+npm view @atriumjs/core version
 npm view @atriumjs/express version
 npm view @atriumjs/react version
 npm view @atriumjs/worker version

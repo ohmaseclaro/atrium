@@ -1,5 +1,5 @@
-import type { Request } from "express";
 import type { ControlHolder, SessionStatus } from "@atriumjs/protocol";
+import type { AtriumHttpInput } from "./http-input.js";
 
 export type Principal = {
   tenantId: string;
@@ -25,26 +25,32 @@ export type AtriumHooks = {
   onControlChange?: (summary: { sessionId: string; holder: ControlHolder }) => void | Promise<void>;
 };
 
-export type AtriumConfig = {
-  /** Reserved for future Redis-backed features; optional today. */
+export type WorkerConfig = {
+  dialBase: string;
+  sharedSecret: string;
+  tls?: { rejectUnauthorized?: boolean };
+};
+
+/** @deprecated Use `worker` on CreateAtriumConfig; kept for express adapter mapping */
+export type LegacyAtriumConfigShape = {
   redis?: { url: string };
-  /** Host resolves identity for HTTP; WS viewer tokens are verified separately. */
-  authorize: (req: Request) => Promise<Principal>;
+  authorize: (input: AtriumHttpInput) => Promise<Principal>;
   policies: AtriumPolicies;
   hooks?: AtriumHooks;
-  /** Advertised viewer transports (defaults to ws + sse + poll). */
-  transports?: Array<"ws" | "sse" | "poll">;
-  /**
-   * Base URL for the worker backplane, e.g. ws://127.0.0.1:7070.
-   * The API opens outbound WebSockets to `${workerDialBase}/internal/stream/:sessionId` (dial pattern).
-   */
   workerDialBase: string;
-  /** Shared secret sent as Authorization: Bearer on API→worker WebSockets and internal HTTP. */
   workerSharedSecret: string;
-  /** HTTP path prefix where routes mount (no trailing slash). */
   mountPath?: string;
-  /** Optional TLS options for the API→worker WebSocket dial (e.g. private CA in staging). */
   workerTls?: { rejectUnauthorized?: boolean };
+};
+
+export type CreateAtriumConfig = {
+  authorize: (input: AtriumHttpInput) => Promise<Principal>;
+  policies: AtriumPolicies;
+  hooks?: AtriumHooks;
+  worker: WorkerConfig;
+  mountPath?: string;
+  /** Advertised viewer transports on POST /sessions */
+  transports?: Array<"ws" | "sse" | "poll">;
 };
 
 export type SessionRecord = {
@@ -57,6 +63,10 @@ export type SessionRecord = {
   status: SessionStatus;
   control: { holder: ControlHolder; since: number };
   currentUrl: string;
-  /** Recent JSON text frames (`hello`, `control`, `navigate`, `title`, `viewport`, `loading`, `tabs`) for viewer reconnect replay. */
   replayJson: string[];
 };
+
+export type TransportOfferWs = { kind: "ws"; url: string };
+export type TransportOfferSse = { kind: "sse"; framesUrl: string; inputUrl: string };
+export type TransportOfferPoll = { kind: "poll"; url: string; inputUrl: string };
+export type TransportOffer = TransportOfferWs | TransportOfferSse | TransportOfferPoll;
