@@ -1,0 +1,27 @@
+{
+  "name": "@atriumjs/atrium-protocol",
+  "version": "0.1.1",
+  "description": "Deprecated shim — use @atriumjs/protocol",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@atriumjs/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

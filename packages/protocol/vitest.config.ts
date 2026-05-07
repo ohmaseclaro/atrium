@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    name: "@atriumjs/atrium-protocol",
+    name: "@atriumjs/protocol",
     environment: "node",
     include: ["src/**/*.test.ts"],
   },

@@ -1,6 +1,6 @@
 {
-  "name": "@atriumjs/atrium-cli",
-  "version": "0.1.0",
+  "name": "@atriumjs/cli",
+  "version": "0.2.0",
   "description": "Developer utilities for the Atrium monorepo (placeholders for local stack helpers)",
   "license": "MIT",
   "repository": {

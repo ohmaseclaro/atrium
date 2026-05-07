@@ -1,6 +1,6 @@
 {
-  "name": "@atriumjs/atrium-react",
-  "version": "0.1.0",
+  "name": "@atriumjs/react",
+  "version": "0.2.0",
   "description": "React UI for embedding Atrium remote browser sessions",
   "license": "MIT",
   "repository": {
@@ -47,7 +47,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@atriumjs/atrium-protocol": "workspace:*"
+    "@atriumjs/protocol": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

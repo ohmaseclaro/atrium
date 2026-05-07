@@ -1,8 +1,8 @@
 import express, { type Request, type Response, type Router } from "express";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
-import type { ControlHolder } from "@atriumjs/atrium-protocol";
-import { sessionBootstrapBodySchema, sessionSnapshotApplyBodySchema } from "@atriumjs/atrium-protocol";
+import type { ControlHolder } from "@atriumjs/protocol";
+import { sessionBootstrapBodySchema, sessionSnapshotApplyBodySchema } from "@atriumjs/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 import type { AtriumConfig } from "./types.js";
 import { MemorySessionStore } from "./session-store.js";

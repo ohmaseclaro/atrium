@@ -2,10 +2,10 @@
 
 ## In scope
 
-- `@atriumjs/atrium-protocol` wire types.
-- `@atriumjs/atrium-server` Express router, dial relay, replay buffer, skeleton HTTP table.
-- `@atriumjs/atrium-react` viewer component.
-- `@atriumjs/atrium-demo` and `examples/express-host`.
+- `@atriumjs/protocol` wire types.
+- `@atriumjs/express` Express router, dial relay, replay buffer, skeleton HTTP table.
+- `@atriumjs/react` viewer component.
+- `@atriumjs/demo` and `examples/express-host`.
 
 ## Out of scope
 

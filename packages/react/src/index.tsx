@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { ControlHolder } from "@atriumjs/atrium-protocol";
-import { parseServerMessage } from "@atriumjs/atrium-protocol";
+import type { ControlHolder } from "@atriumjs/protocol";
+import { parseServerMessage } from "@atriumjs/protocol";
 
 export type RemoteBrowserChromeOptions =
   | "none"
@@ -129,12 +129,17 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
     onWebAuthnRequestRef.current = props.onWebAuthnRequest;
   }, [props.onControlChange, props.onTerminated, props.onWebAuthnRequest]);
 
+  const onExitFullScreenRef = useRef(props.onExitFullScreen);
+  useEffect(() => {
+    onExitFullScreenRef.current = props.onExitFullScreen;
+  }, [props.onExitFullScreen]);
+
   const exitFullScreen = useCallback(() => {
     if (document.fullscreenElement) {
       void document.exitFullscreen?.().catch(() => undefined);
     }
-    props.onExitFullScreen?.();
-  }, [props.onExitFullScreen]);
+    onExitFullScreenRef.current?.();
+  }, []);
 
   const connect = useCallback(() => {
     const url = new URL(props.wsUrl);

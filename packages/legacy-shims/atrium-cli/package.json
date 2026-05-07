@@ -1,0 +1,31 @@
+{
+  "name": "@atriumjs/atrium-cli",
+  "version": "0.1.1",
+  "description": "Deprecated shim — use @atriumjs/cli",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "atrium": "./atrium.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@atriumjs/cli": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "files": [
+    "dist",
+    "atrium.mjs",
+    "README.md"
+  ]
+}

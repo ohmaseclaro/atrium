@@ -1,5 +1,5 @@
 {
-  "name": "@atriumjs/atrium-example-express-host",
+  "name": "@atriumjs/example-express-host",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,7 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@atriumjs/atrium-server": "workspace:*",
+    "@atriumjs/express": "workspace:*",
     "express": "^4.21.2"
   },
   "devDependencies": {

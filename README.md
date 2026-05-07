@@ -6,20 +6,20 @@ This repository is a **pnpm monorepo** (`packages/*`) implementing the architect
 
 ## Documentation (start here)
 
-| Resource                                              | What it is                                                                                                                      |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| [**npm quick start**](docs/quick-start.md)            | Install from npm, start the worker, mount the server API, render `<RemoteBrowser />`, snapshot sessions.                        |
-| [**User guide**](docs/user-guide.md)                  | **How to ship**: install, demo, embed `@atriumjs/atrium-server` + `@atriumjs/atrium-react`, multi-tab behavior, HTTP routes, snapshots, security. |
-| [**Documentation hub**](docs/README.md)               | Index linking **every package README**, examples, design doc, and sprint artifacts.                                             |
-| [**Technical design**](docs/remote-browser-design.md) | Architecture, wire protocol, deployment narrative.                                                                              |
-| [**npm publishing**](docs/npm-publishing.md)          | Package split, prepublish checks, tarball inspection, and publish order for `@atriumjs/atrium-*`.                                        |
-| [**Sprint artifacts**](docs/artifacts/README.md)      | Spec, progress, [`sprint-bundle.json`](docs/artifacts/sprint-bundle.json), per-sprint contracts.                                |
+| Resource                                              | What it is                                                                                                                           |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| [**npm quick start**](docs/quick-start.md)            | Install from npm, start the worker, mount the server API, render `<RemoteBrowser />`, snapshot sessions.                             |
+| [**User guide**](docs/user-guide.md)                  | **How to ship**: install, demo, embed `@atriumjs/express` + `@atriumjs/react`, multi-tab behavior, HTTP routes, snapshots, security. |
+| [**Documentation hub**](docs/README.md)               | Index linking **every package README**, examples, design doc, and sprint artifacts.                                                  |
+| [**Technical design**](docs/remote-browser-design.md) | Architecture, wire protocol, deployment narrative.                                                                                   |
+| [**npm publishing**](docs/npm-publishing.md)          | Package split, prepublish checks, tarball inspection, and publish order for `@atriumjs/*`.                                           |
+| [**Sprint artifacts**](docs/artifacts/README.md)      | Spec, progress, [`sprint-bundle.json`](docs/artifacts/sprint-bundle.json), per-sprint contracts.                                     |
 
 ### For integrators
 
 - **Human-in-the-loop** — transfer control to a real user for OAuth / MFA / captchas, then export **cookies** and Playwright **`storageState`**.
 - **Multi-tab** — `target="_blank"` opens a managed tab; the worker emits **`tabs`** over the viewer WebSocket.
-- **Optional viewer chrome** — [`@atriumjs/atrium-react`](packages/react/README.md) supports presets **`none`**, **`minimal`**, **`full`**, or custom `{ showTabStrip?, showToolbar?, showUrlBar? }` around the live canvas.
+- **Optional viewer chrome** — [`@atriumjs/react`](packages/react/README.md) supports presets **`none`**, **`minimal`**, **`full`**, or custom `{ showTabStrip?, showToolbar?, showUrlBar? }` around the live canvas.
 - **TLS client certificates (mTLS)** — upload a PEM or PFX bundle on `POST /sessions` (`clientCertificates`) and Chromium presents it to the matching origin.
 - **Passkey-aware viewer** — passkeys are **not supported** in remote browsers (WebAuthn is unrelayable by design). The worker disguises Chromium as a device without a platform authenticator so most sites never offer the passkey button; if a site insists, the call rejects with `NotAllowedError` (falls back to password / OTP) and `<RemoteBrowser />` shows a 6s toast. Details: [user guide §7](docs/user-guide.md#7-authentication-with-certificates-passkeys-and-hardware-keys).
 
@@ -28,7 +28,7 @@ This repository is a **pnpm monorepo** (`packages/*`) implementing the architect
 Install the core packages into your app:
 
 ```bash
-npm install express @atriumjs/atrium-server @atriumjs/atrium-react @atriumjs/atrium-worker
+npm install express @atriumjs/express @atriumjs/react @atriumjs/worker
 npm install react react-dom
 npx playwright install chromium
 ```
@@ -39,13 +39,13 @@ Start the Chromium worker:
 ATRIUM_WORKER_SECRET=replace-me npx atrium-worker
 ```
 
-Then mount `@atriumjs/atrium-server` in your Express app and render `@atriumjs/atrium-react`'s `<RemoteBrowser />` with the session payload returned by `POST /atrium/sessions`.
+Then mount `@atriumjs/express` in your Express app and render `@atriumjs/react`'s `<RemoteBrowser />` with the session payload returned by `POST /atrium/sessions`.
 
 Full walkthrough: [npm quick start](docs/quick-start.md).
 
 ## Try the full demo locally
 
-The **`@atriumjs/atrium-demo`** package runs the worker and a Vite + React UI on **http://127.0.0.1:3333** using the same defaults as production-style configs in code (`ATRIUM_WORKER_SECRET`, `ATRIUM_WORKER_DIAL_BASE`). See [`packages/demo/README.md`](packages/demo/README.md).
+The **`@atriumjs/demo`** package runs the worker and a Vite + React UI on **http://127.0.0.1:3333** using the same defaults as production-style configs in code (`ATRIUM_WORKER_SECRET`, `ATRIUM_WORKER_DIAL_BASE`). See [`packages/demo/README.md`](packages/demo/README.md).
 
 ```bash
 pnpm install
@@ -61,10 +61,10 @@ Open the app, edit the tweet if you want, then click **Login and post**. The dem
 The demo is private, but the core pieces publish as public npm packages:
 
 ```bash
-npm install express @atriumjs/atrium-server @atriumjs/atrium-react @atriumjs/atrium-worker
+npm install express @atriumjs/express @atriumjs/react @atriumjs/worker
 ```
 
-`@atriumjs/atrium-protocol` is a shared dependency for schemas and wire types. `@atriumjs/atrium-worker` also exposes the `atrium-worker` binary for running the Chromium worker from an installed package.
+`@atriumjs/protocol` is a shared dependency for schemas and wire types. `@atriumjs/worker` also exposes the `atrium-worker` binary for running the Chromium worker from an installed package.
 
 Release checklist: [`docs/npm-publishing.md`](docs/npm-publishing.md).
 
@@ -125,18 +125,18 @@ Each workspace package also exposes `pnpm run typecheck` (and `lint` aliases it)
 | ---------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | API ↔ worker transport | **Dial** (API opens WebSocket to worker) | Stateless API tier; any node can serve a session after reading `workerDialBase` from config.                                                                                    |
 | Browser automation     | **Playwright**                           | Context isolation, `storage_state`, and a supported path to CDP features (for example `Page.startScreencast` via `newCDPSession`) without maintaining a bespoke raw CDP client. |
-| Frame transport        | **CDP screencast JPEG** over WebSocket   | Two-frame pattern: JSON metadata, then binary JPEG (see `@atriumjs/atrium-protocol`).                                                                                                    |
+| Frame transport        | **CDP screencast JPEG** over WebSocket   | Two-frame pattern: JSON metadata, then binary JPEG (see `@atriumjs/protocol`).                                                                                                  |
 
 ## Packages
 
-| Package                                           | Role                                                                                     |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| [`@atriumjs/atrium-demo`](packages/demo/README.md)         | **Full-stack demo** — server + React + worker; `pnpm demo`.                              |
-| [`@atriumjs/atrium-protocol`](packages/protocol/README.md) | Zod + TypeScript for WebSocket and bootstrap payloads.                                   |
-| [`@atriumjs/atrium-server`](packages/server/README.md)     | Express `atrium()` mount; viewer relay; **dials** worker with `Authorization: Bearer …`. |
-| [`@atriumjs/atrium-worker`](packages/worker/README.md)     | Chromium + Playwright; screencast JPEG; multi-tab context.                               |
-| [`@atriumjs/atrium-react`](packages/react/README.md)       | `<RemoteBrowser />` canvas viewer + **optional** embedded chrome.                        |
-| [`@atriumjs/atrium-cli`](packages/cli/README.md)           | `atrium doctor` CLI.                                                                     |
+| Package                                             | Role                                                                                     |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| [`@atriumjs/demo`](packages/demo/README.md)         | **Full-stack demo** — server + React + worker; `pnpm demo`.                              |
+| [`@atriumjs/protocol`](packages/protocol/README.md) | Zod + TypeScript for WebSocket and bootstrap payloads.                                   |
+| [`@atriumjs/express`](packages/express/README.md)   | Express `atrium()` mount; viewer relay; **dials** worker with `Authorization: Bearer …`. |
+| [`@atriumjs/worker`](packages/worker/README.md)     | Chromium + Playwright; screencast JPEG; multi-tab context.                               |
+| [`@atriumjs/react`](packages/react/README.md)       | `<RemoteBrowser />` canvas viewer + **optional** embedded chrome.                        |
+| [`@atriumjs/cli`](packages/cli/README.md)           | `atrium doctor` CLI.                                                                     |
 
 ## Minimal Express-only example
 
@@ -171,7 +171,7 @@ On **Linux servers or CI** without a real display, run the worker under **[Xvfb]
 Worker dry-run (no Chromium):
 
 ```bash
-ATRIUM_WORKER_DRY=1 pnpm --filter @atriumjs/atrium-worker start
+ATRIUM_WORKER_DRY=1 pnpm --filter @atriumjs/worker start
 ```
 
 ## Docker (worker)

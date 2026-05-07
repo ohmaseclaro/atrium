@@ -10,10 +10,10 @@ This guide matches the **current** open-source monorepo. If you are installing A
 
 ### From npm
 
-Use the [npm quick start](./quick-start.md) to install the public packages, run `npx atrium-worker`, mount `@atriumjs/atrium-server`, render `@atriumjs/atrium-react`, and export a session snapshot.
+Use the [npm quick start](./quick-start.md) to install the public packages, run `npx atrium-worker`, mount `@atriumjs/express`, render `@atriumjs/react`, and export a session snapshot.
 
 ```bash
-npm install express @atriumjs/atrium-server @atriumjs/atrium-react @atriumjs/atrium-worker
+npm install express @atriumjs/express @atriumjs/react @atriumjs/worker
 npm install react react-dom
 npx playwright install chromium
 ```
@@ -37,22 +37,22 @@ Details: [`packages/demo/README.md`](../packages/demo/README.md).
 
 ## 2. What ships in the monorepo
 
-| NPM package            | Role                                                                                         |
-| ---------------------- | -------------------------------------------------------------------------------------------- |
-| **`@atriumjs/atrium-server`**   | Express router + viewer WebSocket relay; your API **dials** the worker with a shared secret. |
-| **`@atriumjs/atrium-worker`**   | Listens for that dial, runs **Playwright** + Chromium, streams **JPEG screencast** frames.   |
-| **`@atriumjs/atrium-protocol`** | Shared **Zod** schemas for JSON wire messages (server ↔ viewer ↔ worker path through relay). |
-| **`@atriumjs/atrium-react`**    | **`<RemoteBrowser />`** — canvas viewer, optional chrome, control state.                     |
-| **`@atriumjs/atrium-demo`**     | Batteries-included local demo.                                                               |
-| **`@atriumjs/atrium-cli`**      | `atrium doctor` and future helpers.                                                          |
+| NPM package              | Role                                                                                         |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| **`@atriumjs/express`**  | Express router + viewer WebSocket relay; your API **dials** the worker with a shared secret. |
+| **`@atriumjs/worker`**   | Listens for that dial, runs **Playwright** + Chromium, streams **JPEG screencast** frames.   |
+| **`@atriumjs/protocol`** | Shared **Zod** schemas for JSON wire messages (server ↔ viewer ↔ worker path through relay). |
+| **`@atriumjs/react`**    | **`<RemoteBrowser />`** — canvas viewer, optional chrome, control state.                     |
+| **`@atriumjs/demo`**     | Batteries-included local demo.                                                               |
+| **`@atriumjs/cli`**      | `atrium doctor` and future helpers.                                                          |
 
 Package-specific READMEs: [`docs/README.md`](./README.md).
 
 ---
 
-## 3. Embed the API (`@atriumjs/atrium-server`)
+## 3. Embed the API (`@atriumjs/express`)
 
-1. Install: `npm install express @atriumjs/atrium-server` (or `pnpm add express @atriumjs/atrium-server`).
+1. Install: `npm install express @atriumjs/express` (or `pnpm add express @atriumjs/express`).
 2. Call **`atrium(config)`** with `authorize`, `policies`, **`workerDialBase`**, **`workerSharedSecret`**, and the required config fields shown below.
 3. Mount **`router`** on your Express app (e.g. `app.use("/atrium", router)`).
 4. On your **`http.Server`**, handle **`upgrade`** and delegate matching paths to **`handleViewerUpgrade`**.
@@ -62,7 +62,7 @@ Minimal pattern (see [`examples/express-host`](../examples/express-host/README.m
 ```ts
 import { createServer } from "node:http";
 import express from "express";
-import { atrium } from "@atriumjs/atrium-server";
+import { atrium } from "@atriumjs/express";
 
 const app = express();
 const { router, handleViewerUpgrade } = atrium({
@@ -92,7 +92,7 @@ server.on("upgrade", (req, socket, head) => {
 server.listen(3000);
 ```
 
-Full API surface: [`packages/server/README.md`](../packages/server/README.md).
+Full API surface: [`packages/express/README.md`](../packages/express/README.md).
 
 ---
 
@@ -105,7 +105,7 @@ with **`Authorization: Bearer`** `ATRIUM_WORKER_SECRET`.
 Install and run from npm:
 
 ```bash
-npm install @atriumjs/atrium-worker
+npm install @atriumjs/worker
 npx playwright install chromium
 export ATRIUM_WORKER_SECRET=dev-secret-change-me
 npx atrium-worker
@@ -115,14 +115,14 @@ Run locally from the monorepo after `pnpm build`:
 
 ```bash
 export ATRIUM_WORKER_SECRET=dev-secret-change-me
-pnpm --filter @atriumjs/atrium-worker start
+pnpm --filter @atriumjs/worker start
 ```
 
 Headed Chromium needs a display on Linux — use **Xvfb** or the **Docker** image (see root [README](../README.md#docker-worker)).
 
 ---
 
-## 5. Embed the React viewer (`@atriumjs/atrium-react`)
+## 5. Embed the React viewer (`@atriumjs/react`)
 
 After **`POST …/sessions`**, you receive **`sessionId`**, **`viewerToken`**, and **`wsUrl`**. Pass them to **`<RemoteBrowser />`**.
 
@@ -263,7 +263,7 @@ More: [Main README — Security notes](../README.md#security-notes-public-facing
 
 ## 10. Wire protocol types
 
-Validate or explore message shapes with **`@atriumjs/atrium-protocol`** (`parseServerMessage`, `parseClientMessage`, exported schemas). See [`packages/protocol/README.md`](../packages/protocol/README.md).
+Validate or explore message shapes with **`@atriumjs/protocol`** (`parseServerMessage`, `parseClientMessage`, exported schemas). See [`packages/protocol/README.md`](../packages/protocol/README.md).
 
 ---
 

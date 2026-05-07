@@ -17,6 +17,6 @@
 ### T3: Optional TLS and memory soft cap
 
 - **Done when:** `AtriumConfig.workerTls` forwards to upstream `WebSocket`; `WorkerServerOptions.memorySoftCapBytes` enables periodic eviction of the oldest session when heap exceeds cap.
-- **Evidence required:** `packages/server/src/types.ts` and worker options documented in README.
+- **Evidence required:** `packages/express/src/types.ts` and worker options documented in README.
 - **Dependencies:** (none)
 - **Risk notes:** Soft cap is process-level heuristic, not per-session cgroup.
