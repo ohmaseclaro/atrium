@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Atrium — remote Chromium for human-in-the-loop automation</title>
+    <meta
+      name="description"
+      content="Open-source toolkit for embeddable remote browser sessions: hand control to a human, then snapshot cookies and Playwright storage state."
+    />
+    <style>
+      :root {
+        --bg: #0c1017;
+        --surface: #141a24;
+        --border: #243044;
+        --text: #e8edf5;
+        --muted: #8b9cb3;
+        --accent: #3dd6c3;
+        --accent-dim: #2a9d8f;
+        --code-bg: #0a0d12;
+        --link: #7dd3fc;
+        --radius: 10px;
+        --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.65;
+        font-size: 17px;
+      }
+      a {
+        color: var(--link);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .wrap {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 0 1.25rem 4rem;
+      }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: rgba(12, 16, 23, 0.92);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border);
+      }
+      header .inner {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 0.85rem 1.25rem;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+      }
+      .brand {
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--text);
+        font-size: 1.15rem;
+      }
+      .brand span {
+        color: var(--accent);
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem 1rem;
+        font-size: 0.9rem;
+      }
+      nav a {
+        color: var(--muted);
+      }
+      nav a:hover {
+        color: var(--accent);
+      }
+      .hero {
+        padding: 3.2rem 0 2.5rem;
+      }
+      .hero h1 {
+        font-size: clamp(1.85rem, 4.5vw, 2.45rem);
+        line-height: 1.2;
+        margin: 0 0 1rem;
+        letter-spacing: -0.03em;
+      }
+      .hero p.lead {
+        color: var(--muted);
+        font-size: 1.1rem;
+        max-width: 38rem;
+        margin: 0 0 1.5rem;
+      }
+      .cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.55rem 1rem;
+        border-radius: var(--radius);
+        font-weight: 600;
+        font-size: 0.95rem;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+      }
+      .btn.primary {
+        background: linear-gradient(135deg, var(--accent-dim), var(--accent));
+        border-color: transparent;
+        color: #04120f;
+      }
+      .btn:hover {
+        filter: brightness(1.08);
+        text-decoration: none;
+      }
+      section {
+        margin-top: 2.75rem;
+        padding-top: 0.5rem;
+      }
+      section > h2 {
+        font-size: 1.35rem;
+        margin: 0 0 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border);
+        letter-spacing: -0.02em;
+      }
+      h3 {
+        font-size: 1.05rem;
+        margin: 1.5rem 0 0.5rem;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.1rem 1.25rem;
+        margin: 0.75rem 0;
+      }
+      .grid {
+        display: grid;
+        gap: 0.75rem;
+      }
+      @media (min-width: 560px) {
+        .grid.two {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .pkg {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.85rem 1rem;
+        background: var(--code-bg);
+      }
+      .pkg strong {
+        display: block;
+        font-family: var(--mono);
+        font-size: 0.88rem;
+        color: var(--accent);
+        margin-bottom: 0.25rem;
+      }
+      .pkg p {
+        margin: 0;
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+      pre,
+      code {
+        font-family: var(--mono);
+      }
+      pre {
+        margin: 0.75rem 0;
+        padding: 1rem 1.1rem;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow-x: auto;
+        font-size: 0.82rem;
+        line-height: 1.5;
+      }
+      ul.ref {
+        margin: 0.5rem 0 0;
+        padding-left: 1.2rem;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+      ul.ref li {
+        margin: 0.35rem 0;
+      }
+      footer {
+        margin-top: 3.5rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+      .pill {
+        display: inline-block;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 0.2rem 0.45rem;
+        border-radius: 4px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--muted);
+        margin-right: 0.35rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="inner">
+        <a class="brand" href="/">Atrium<span>.</span></a>
+        <nav>
+          <a href="#packages">npm</a>
+          <a href="#start">Quick start</a>
+          <a href="#deploy">Deploy</a>
+          <a href="https://demo.atriumjs.dev">Live demo</a>
+          <a href="https://github.com/atriumjs/atrium">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <div class="hero">
+        <span class="pill">Open source</span>
+        <span class="pill">MIT</span>
+        <span class="pill">Playwright</span>
+        <h1>Remote Chromium your app can share with a human</h1>
+        <p class="lead">
+          Atrium is a small stack for <strong>human-in-the-loop</strong> flows: OAuth, MFA,
+          captchas, or any step where automation should pause while a person uses a real browser
+          session—then hand control back, export cookies, and capture Playwright
+          <code>storageState</code>.
+        </p>
+        <div class="cta-row">
+          <a class="btn primary" href="https://demo.atriumjs.dev">Try the live demo</a>
+          <a class="btn" href="https://github.com/atriumjs/atrium">Source on GitHub</a>
+          <a class="btn" href="https://www.npmjs.com/org/atriumjs">npm scope @atriumjs</a>
+        </div>
+      </div>
+
+      <section id="what">
+        <h2>What you get</h2>
+        <div class="grid two">
+          <div class="card">
+            <strong>Host API</strong>
+            <p style="margin: 0.35rem 0 0; color: var(--muted); font-size: 0.95rem">
+              Express (and a framework-agnostic core) expose session creation, control transfer,
+              navigation allowlists, cookies, and snapshots over HTTP—your worker dials out;
+              browsers never get raw CDP keys.
+            </p>
+          </div>
+          <div class="card">
+            <strong>Viewer UI</strong>
+            <p style="margin: 0.35rem 0 0; color: var(--muted); font-size: 0.95rem">
+              <code>@atriumjs/react</code> renders the remote canvas with optional chrome, tab
+              strip, and toasts for passkey limitations—embed in your product behind your own auth.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="packages">
+        <h2>Packages on npm</h2>
+        <p style="color: var(--muted); margin-top: 0">
+          Install only what you need. All packages live under the
+          <a href="https://www.npmjs.com/org/atriumjs">@atriumjs</a> scope.
+        </p>
+        <div class="grid two">
+          <div class="pkg">
+            <strong>@atriumjs/protocol</strong>
+            <p>Shared Zod schemas and wire types.</p>
+            <a href="https://www.npmjs.com/package/@atriumjs/protocol">npm →</a>
+          </div>
+          <div class="pkg">
+            <strong>@atriumjs/core</strong>
+            <p>Fetch-oriented session dispatch, transports, relay glue.</p>
+            <a href="https://www.npmjs.com/package/@atriumjs/core">npm →</a>
+          </div>
+          <div class="pkg">
+            <strong>@atriumjs/express</strong>
+            <p>Express middleware and viewer WebSocket upgrade wiring.</p>
+            <a href="https://www.npmjs.com/package/@atriumjs/express">npm →</a>
+          </div>
+          <div class="pkg">
+            <strong>@atriumjs/react</strong>
+            <p>Embeddable <code>RemoteBrowser</code> component.</p>
+            <a href="https://www.npmjs.com/package/@atriumjs/react">npm →</a>
+          </div>
+          <div class="pkg">
+            <strong>@atriumjs/worker</strong>
+            <p>Chromium + Playwright worker; <code>atrium-worker</code> binary.</p>
+            <a href="https://www.npmjs.com/package/@atriumjs/worker">npm →</a>
+          </div>
+          <div class="pkg">
+            <strong>@atriumjs/cli</strong>
+            <p>Developer CLI entry (<code>atrium</code>).</p>
+            <a href="https://www.npmjs.com/package/@atriumjs/cli">npm →</a>
+          </div>
+        </div>
+      </section>
+
+      <section id="start">
+        <h2>Quick start</h2>
+        <h3>1. Install</h3>
+        <pre><code>npm install express @atriumjs/express @atriumjs/react @atriumjs/worker
+npm install react react-dom
+npx playwright install chromium</code></pre>
+
+        <h3>2. Run the worker</h3>
+        <pre><code>ATRIUM_WORKER_SECRET=replace-me npx atrium-worker</code></pre>
+
+        <h3>3. Mount the API (Express)</h3>
+        <pre><code>import express from "express";
+import { createServer } from "node:http";
+import { atrium } from "@atriumjs/express";
+
+const app = express();
+const { router, handleViewerUpgrade } = atrium({
+  authorize: async (req) =&gt; ({ tenantId: "t1", userId: "u1" }),
+  policies: { /* sessionTtlMs, urlAllowlist, … */ },
+  workerDialBase: process.env.ATRIUM_WORKER_DIAL_BASE!,
+  workerSharedSecret: process.env.ATRIUM_WORKER_SECRET!,
+  mountPath: "/atrium",
+});
+app.use("/atrium", router);
+
+const server = createServer(app);
+server.on("upgrade", handleViewerUpgrade);
+server.listen(3000);</code></pre>
+
+        <h3>4. Create a session and render the viewer</h3>
+        <p style="color: var(--muted); font-size: 0.95rem">
+          <code>POST /atrium/sessions</code> returns <code>sessionId</code>,
+          <code>viewerToken</code>, and transport URLs. Pass them into
+          <code>@atriumjs/react</code>—see the
+          <a href="https://github.com/atriumjs/atrium/blob/main/docs/quick-start.md"
+            >quick start doc</a
+          >
+          and
+          <a href="https://github.com/atriumjs/atrium/blob/main/docs/user-guide.md">user guide</a>
+          for full detail.
+        </p>
+      </section>
+
+      <section id="sites">
+        <h2>Public sites</h2>
+        <div class="card">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem">
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--border)">
+                <td style="padding: 0.5rem 0; font-weight: 600; width: 40%">atriumjs.dev</td>
+                <td style="padding: 0.5rem 0; color: var(--muted)">
+                  This static landing page (nginx <code>root</code>).
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 0.5rem 0; font-weight: 600">demo.atriumjs.dev</td>
+                <td style="padding: 0.5rem 0; color: var(--muted)">
+                  Full-stack demo app — nginx reverse-proxies to Node on loopback (see deploy docs).
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="deploy">
+        <h2>Deployment (same VPS pattern as our other apps)</h2>
+        <p style="color: var(--muted); margin-top: 0">
+          Production uses <strong>Cloudflare</strong> in front, <strong>host nginx</strong> on port
+          80, and <strong>no Docker</strong> for the marketing HTML or the demo Node process by
+          default. The Playwright worker may run in Docker or directly—see
+          <code>docker/worker/Dockerfile</code> in the repo.
+        </p>
+
+        <h3>Split hostnames</h3>
+        <ul class="ref">
+          <li>
+            <strong>atriumjs.dev</strong> — vhost
+            <code>deploy/nginx/atrium-landing-host.conf</code> →
+            <code>root …/deploy/landing</code> (this file).
+          </li>
+          <li>
+            <strong>demo.atriumjs.dev</strong> — vhost
+            <code>deploy/nginx/atrium-demo-host.conf</code> → <code>proxy_pass</code> to
+            <code>127.0.0.1:$PORT</code> (Express + Vite-built static UI + WS upgrades).
+          </li>
+        </ul>
+
+        <h3>Server update script</h3>
+        <p style="color: var(--muted); font-size: 0.95rem">
+          On the VPS, the repo lives under <code>/home/atrium</code> (or
+          <code>$ATRIUM_DEPLOY_DIR</code>). Run:
+        </p>
+        <pre><code>cd /home/atrium &amp;&amp; ./deploy/update-demo.sh</code></pre>
+        <p style="color: var(--muted); font-size: 0.95rem">
+          That script: <code>git fetch</code>/<code>reset</code> →
+          <code>pnpm install --frozen-lockfile</code> → <code>pnpm build</code> →
+          <code>sudo systemctl restart atrium-demo</code> → sync both nginx site files and
+          <code>sudo nginx -t &amp;&amp; systemctl reload nginx</code>. Passwordless sudo is
+          required for those commands only—see <code>deploy/README.md</code>.
+        </p>
+
+        <h3>systemd</h3>
+        <p style="color: var(--muted); font-size: 0.95rem">
+          <code>deploy/atrium-demo.service</code> runs <code>deploy/run-demo.sh</code> from
+          <code>packages/demo</code> with <code>EnvironmentFile=deploy/atrium-demo.env</code> (PORT,
+          worker dial URL, shared secret).
+        </p>
+
+        <h3>GitHub Actions</h3>
+        <p style="color: var(--muted); font-size: 0.95rem">
+          Workflow <code>.github/workflows/deploy-demo.yml</code> runs on pushes to
+          <code>main</code> when demo, libraries, lockfile, or <code>deploy/**</code> change: CI
+          lint/test/build, then SSH (same secrets as our Capitanias deploy: <code>SSH_HOST</code>,
+          <code>SSH_USER</code>, <code>SSH_PRIVATE_KEY</code>) executes the update script and curls
+          <code>/atrium/healthz</code> on loopback.
+        </p>
+
+        <h3>Docker (optional)</h3>
+        <ul class="ref">
+          <li>
+            Worker image: <code>docker/worker/Dockerfile</code> — publish <code>7070</code> (or your
+            dial port) to loopback only.
+          </li>
+          <li>
+            Demo + landing do not require app containers; keep the box aligned with other
+            nginx-terminated projects.
+          </li>
+        </ul>
+
+        <h3>Publish to npm</h3>
+        <p style="color: var(--muted); font-size: 0.95rem">
+          Maintainer checklist:
+          <a href="https://github.com/atriumjs/atrium/blob/main/docs/npm-publishing.md"
+            >docs/npm-publishing.md</a
+          >
+          (<code>pnpm publish:check</code>, ordered <code>pnpm publish</code> for protocol → core →
+          express → …).
+        </p>
+      </section>
+
+      <section id="refs">
+        <h2>References</h2>
+        <ul class="ref">
+          <li>
+            <a href="https://github.com/atriumjs/atrium">github.com/atriumjs/atrium</a> — monorepo,
+            issues, PRs
+          </li>
+          <li><a href="https://demo.atriumjs.dev">demo.atriumjs.dev</a> — hosted demo</li>
+          <li>
+            <a href="https://github.com/atriumjs/atrium/tree/main/docs">Documentation tree</a> —
+            user guide, quick start, design
+          </li>
+          <li>
+            <a href="https://github.com/atriumjs/atrium/blob/main/deploy/README.md"
+              >deploy/README.md</a
+            >
+            — VPS bootstrap
+          </li>
+          <li>
+            <a href="https://github.com/atriumjs/atrium/blob/main/docs/atrium-v2-design.md"
+              >v0.2 design draft</a
+            >
+            — roadmap
+          </li>
+        </ul>
+      </section>
+
+      <footer>
+        © Atrium contributors. MIT License.
+        <a href="https://github.com/atriumjs/atrium">GitHub</a> ·
+        <a href="https://www.npmjs.com/org/atriumjs">npm</a> ·
+        <a href="https://demo.atriumjs.dev">Demo</a>
+      </footer>
+    </div>
+  </body>
+</html>

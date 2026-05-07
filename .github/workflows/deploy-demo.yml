@@ -1,4 +1,4 @@
-name: Deploy demo (demo.atriumjs.dev)
+name: Deploy landing + demo (atriumjs.dev)
 
 on:
   push:
@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: atrium-deploy-demo
+  group: atrium-deploy-sites
   cancel-in-progress: false
 
 jobs:
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: demo
-      url: https://demo.atriumjs.dev
+      url: https://atriumjs.dev
 
     steps:
       - uses: actions/checkout@v4
@@ -144,13 +144,40 @@ jobs:
             echo "❌ Health check failed"
             exit 1
 
+      - name: Verify landing (static) on loopback
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script_stop: false
+          timeout: 60s
+          command_timeout: 2m
+          script: |
+            set -e
+            DEPLOY_DIR="${{ secrets.ATRIUM_DEPLOY_DIR }}"
+            D="${DEPLOY_DIR:-/home/atrium}"
+            echo "🔍 Landing GET / with Host: atriumjs.dev …"
+            for i in $(seq 1 10); do
+              CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: atriumjs.dev" "http://127.0.0.1/" || true)
+              CODE=${CODE:-000}
+              if [ "$CODE" = "200" ]; then
+                echo "✅ Landing OK (HTTP $CODE) after $i attempt(s)"
+                exit 0
+              fi
+              echo "⏳ HTTP $CODE — attempt $i/10, sleep 3s"
+              sleep 3
+            done
+            echo "❌ Landing check failed (nginx root deploy/landing?)"
+            exit 1
+
       - name: Summary (success)
         if: success()
         run: |
-          echo "✅ Demo deployed — https://demo.atriumjs.dev"
+          echo "✅ Deployed — https://atriumjs.dev (landing) · https://demo.atriumjs.dev (demo)"
           echo "Commit: ${{ github.sha }}"
 
       - name: Summary (failure)
         if: failure()
         run: |
-          echo "❌ Demo deploy failed — see SSH logs and /tmp/atrium-demo-deploy.log on the server"
+          echo "❌ Deploy failed — see SSH logs, /tmp/atrium-demo-deploy.log, and journalctl -u atrium-demo on the server"
