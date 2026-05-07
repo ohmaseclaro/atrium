@@ -11,5 +11,5 @@ if (cmd === "doctor") {
   process.exit(0);
 }
 
-console.log(`atrium cli v0.1 — unknown command "${cmd ?? ""}". Try: atrium doctor`);
+console.log(`atrium cli v0.2 — unknown command "${cmd ?? ""}". Try: atrium doctor`);
 process.exit(1);
