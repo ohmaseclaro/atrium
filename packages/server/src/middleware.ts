@@ -1,9 +1,13 @@
 import express, { type Request, type Response, type Router } from "express";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
+import type { ControlHolder } from "@atrium/protocol";
+import { sessionBootstrapBodySchema, sessionSnapshotApplyBodySchema } from "@atrium/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 import type { AtriumConfig } from "./types.js";
 import { MemorySessionStore } from "./session-store.js";
+import { urlAllowed } from "./url-allowlist.js";
+import { workerInternalFetch } from "./worker-client.js";
 
 export type AtriumMount = {
   router: Router;
@@ -14,7 +18,7 @@ export type AtriumMount = {
   handleViewerUpgrade: (req: IncomingMessage, socket: Duplex, head: Buffer) => void;
 };
 
-function viewerStreamMatch(
+export function viewerStreamMatch(
   mountPath: string,
   pathname: string,
 ): { sessionId: string } | undefined {
@@ -33,7 +37,44 @@ export function atrium(config: AtriumConfig): AtriumMount {
 
   router.post("/sessions", async (req: Request, res: Response) => {
     const principal = await config.authorize(req);
+    const parsed = sessionBootstrapBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_session_body", detail: parsed.error.flatten() });
+      return;
+    }
+    const b = parsed.data;
+    const hasStorageState = b.storageState != null && typeof b.storageState === "object";
+    const hasBootstrap =
+      hasStorageState ||
+      (b.cookies?.length ?? 0) > 0 ||
+      (b.initialUrl !== undefined && b.initialUrl.length > 0) ||
+      b.viewport !== undefined;
+
     const record = store.createSession(principal);
+
+    if (hasBootstrap) {
+      const payload: Record<string, unknown> = {};
+      if (hasStorageState) payload.storageState = b.storageState;
+      if (b.cookies !== undefined) payload.cookies = b.cookies;
+      if (b.initialUrl !== undefined) payload.initialUrl = b.initialUrl;
+      if (b.viewport !== undefined) payload.viewport = b.viewport;
+
+      const r = await workerInternalFetch(
+        config.workerDialBase,
+        config.workerSharedSecret,
+        `/internal/session/${encodeURIComponent(record.sessionId)}/bootstrap`,
+        { method: "POST", body: payload },
+      );
+      if (!r.ok) {
+        store.delete(record.sessionId);
+        const detail = await r.text();
+        res
+          .status(r.status === 400 ? 400 : 502)
+          .json({ error: "worker_bootstrap_failed", detail: detail.slice(0, 2000) });
+        return;
+      }
+    }
+
     const hostHeader = req.get("host") ?? "localhost";
     const proto = req.protocol === "https" ? "wss" : "ws";
     const wsUrl = `${proto}://${hostHeader}${mount}/sessions/${record.sessionId}/stream`;
@@ -47,6 +88,8 @@ export function atrium(config: AtriumConfig): AtriumMount {
       viewerToken: record.viewerToken,
       wsUrl,
       expiresAt: record.viewerTokenExpiresAt,
+      status: record.status,
+      control: record.control,
     });
   });
 
@@ -59,7 +102,11 @@ export function atrium(config: AtriumConfig): AtriumMount {
     res.json({
       sessionId: rec.sessionId,
       tenantId: rec.tenantId,
+      userId: rec.userId,
       createdAt: rec.createdAt,
+      status: rec.status,
+      control: rec.control,
+      currentUrl: rec.currentUrl,
     });
   });
 
@@ -71,10 +118,209 @@ export function atrium(config: AtriumConfig): AtriumMount {
       return;
     }
     store.delete(rec.sessionId);
+    void workerInternalFetch(
+      config.workerDialBase,
+      config.workerSharedSecret,
+      `/internal/session/${encodeURIComponent(rec.sessionId)}/pending-bootstrap`,
+      { method: "DELETE" },
+    ).catch(() => undefined);
     await config.hooks?.onSessionTerminated?.({
       sessionId: rec.sessionId,
       reason: "destroyed",
     });
+    res.status(204).send();
+  });
+
+  router.post("/sessions/:id/control", async (req: Request, res: Response) => {
+    await config.authorize(req);
+    const rec = store.getById(req.params.id);
+    if (!rec) {
+      res.status(404).json({ error: "session_not_found" });
+      return;
+    }
+    const body = req.body as { action?: string; to?: ControlHolder };
+    if (body?.action !== "grant" && body?.action !== "release") {
+      res.status(400).json({ error: "invalid_action" });
+      return;
+    }
+    const next: ControlHolder =
+      body.action === "release" ? "agent" : body.to === "human" ? "human" : "agent";
+    store.updateControl(rec.sessionId, next);
+    void workerInternalFetch(
+      config.workerDialBase,
+      config.workerSharedSecret,
+      `/internal/session/${encodeURIComponent(rec.sessionId)}/control`,
+      { method: "POST", body: { holder: next } },
+    ).catch(() => undefined);
+    await config.hooks?.onControlChange?.({ sessionId: rec.sessionId, holder: next });
+    res.status(200).json({ control: store.getById(rec.sessionId)?.control });
+  });
+
+  router.post("/sessions/:id/x-demo/compose-tweet", async (req: Request, res: Response) => {
+    await config.authorize(req);
+    const rec = store.getById(req.params.id);
+    if (!rec) {
+      res.status(404).json({ error: "session_not_found" });
+      return;
+    }
+    const text = (req.body as { text?: string })?.text;
+    if (typeof text !== "string" || !text.trim()) {
+      res.status(400).json({ error: "missing_text" });
+      return;
+    }
+    const trimmed = text.trim();
+    if (trimmed.length > 280) {
+      res.status(400).json({ error: "text_too_long" });
+      return;
+    }
+    const r = await workerInternalFetch(
+      config.workerDialBase,
+      config.workerSharedSecret,
+      `/internal/session/${encodeURIComponent(req.params.id)}/x-demo/compose-tweet`,
+      { method: "POST", body: { text: trimmed } },
+    );
+    if (!r.ok) {
+      const detail = await r.text();
+      res
+        .status(
+          r.status === 404
+            ? 404
+            : r.status === 409
+              ? 409
+              : r.status === 400
+                ? 400
+                : r.status === 501
+                  ? 501
+                  : 502,
+        )
+        .json({ error: "worker_x_compose_failed", detail: detail.slice(0, 2000) });
+      return;
+    }
+    res.status(204).send();
+  });
+
+  router.post("/sessions/:id/navigate", async (req: Request, res: Response) => {
+    await config.authorize(req);
+    const rec = store.getById(req.params.id);
+    if (!rec) {
+      res.status(404).json({ error: "session_not_found" });
+      return;
+    }
+    const url = (req.body as { url?: string })?.url;
+    if (!url || typeof url !== "string") {
+      res.status(400).json({ error: "missing_url" });
+      return;
+    }
+    if (!urlAllowed(url, config.policies.urlAllowlist)) {
+      res.status(400).json({ error: "url_not_allowed" });
+      return;
+    }
+    const r = await workerInternalFetch(
+      config.workerDialBase,
+      config.workerSharedSecret,
+      `/internal/session/${encodeURIComponent(req.params.id)}/navigate`,
+      { method: "POST", body: { url } },
+    );
+    if (!r.ok) {
+      const t = await r.text();
+      res.status(502).json({ error: "worker_navigate_failed", detail: t });
+      return;
+    }
+    store.setCurrentUrl(rec.sessionId, url);
+    res.status(204).send();
+  });
+
+  router.get("/sessions/:id/cookies", async (req: Request, res: Response) => {
+    await config.authorize(req);
+    const rec = store.getById(req.params.id);
+    if (!rec) {
+      res.status(404).json({ error: "session_not_found" });
+      return;
+    }
+    const r = await workerInternalFetch(
+      config.workerDialBase,
+      config.workerSharedSecret,
+      `/internal/session/${encodeURIComponent(req.params.id)}/cookies`,
+    );
+    if (!r.ok) {
+      res.status(r.status === 404 ? 404 : 502).json({ error: "worker_cookies_failed" });
+      return;
+    }
+    const data = (await r.json()) as unknown;
+    res.json(data);
+  });
+
+  router.get("/sessions/:id/storage-state", async (req: Request, res: Response) => {
+    await config.authorize(req);
+    const rec = store.getById(req.params.id);
+    if (!rec) {
+      res.status(404).json({ error: "session_not_found" });
+      return;
+    }
+    const r = await workerInternalFetch(
+      config.workerDialBase,
+      config.workerSharedSecret,
+      `/internal/session/${encodeURIComponent(req.params.id)}/storage-state`,
+    );
+    if (!r.ok) {
+      res.status(r.status === 404 ? 404 : 502).json({ error: "worker_storage_failed" });
+      return;
+    }
+    const data = (await r.json()) as unknown;
+    res.json(data);
+  });
+
+  router.get("/sessions/:id/session-snapshot", async (req: Request, res: Response) => {
+    await config.authorize(req);
+    const rec = store.getById(req.params.id);
+    if (!rec) {
+      res.status(404).json({ error: "session_not_found" });
+      return;
+    }
+    const base = `/internal/session/${encodeURIComponent(req.params.id)}`;
+    const [rc, rs] = await Promise.all([
+      workerInternalFetch(config.workerDialBase, config.workerSharedSecret, `${base}/cookies`),
+      workerInternalFetch(
+        config.workerDialBase,
+        config.workerSharedSecret,
+        `${base}/storage-state`,
+      ),
+    ]);
+    if (!rc.ok || !rs.ok) {
+      const code = rc.status === 404 || rs.status === 404 ? 404 : 502;
+      res.status(code).json({ error: "worker_snapshot_failed" });
+      return;
+    }
+    const cookies = (await rc.json()) as unknown;
+    const storageState = (await rs.json()) as unknown;
+    res.json({ cookies, storageState });
+  });
+
+  router.post("/sessions/:id/session-snapshot", async (req: Request, res: Response) => {
+    await config.authorize(req);
+    const rec = store.getById(req.params.id);
+    if (!rec) {
+      res.status(404).json({ error: "session_not_found" });
+      return;
+    }
+    const parsed = sessionSnapshotApplyBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_snapshot_body", detail: parsed.error.flatten() });
+      return;
+    }
+    const r = await workerInternalFetch(
+      config.workerDialBase,
+      config.workerSharedSecret,
+      `/internal/session/${encodeURIComponent(req.params.id)}/apply-session`,
+      { method: "POST", body: parsed.data },
+    );
+    if (!r.ok) {
+      const t = await r.text();
+      res
+        .status(r.status === 404 ? 404 : r.status === 400 ? 400 : 502)
+        .json({ error: "worker_apply_failed", detail: t.slice(0, 2000) });
+      return;
+    }
     res.status(204).send();
   });
 
@@ -99,11 +345,15 @@ export function atrium(config: AtriumConfig): AtriumMount {
         viewer.close(4403, "invalid_token");
         return;
       }
+      for (const line of store.peekReplay(match.sessionId)) {
+        if (viewer.readyState === WebSocket.OPEN) viewer.send(line);
+      }
       const dialBase = config.workerDialBase.replace(/\/$/, "");
       const wsBase = dialBase.replace(/^http:/, "ws:").replace(/^https:/, "wss:");
       const upstreamUrl = `${wsBase}/internal/stream/${match.sessionId}`;
       const upstream = new WebSocket(upstreamUrl, {
         headers: { Authorization: `Bearer ${config.workerSharedSecret}` },
+        ...(config.workerTls ? { ...config.workerTls } : {}),
       });
       const closeBoth = (): void => {
         try {
@@ -125,6 +375,9 @@ export function atrium(config: AtriumConfig): AtriumMount {
         });
       });
       upstream.on("message", (data, isBinary) => {
+        if (!isBinary) {
+          store.appendUpstreamJson(match.sessionId, data.toString());
+        }
         if (viewer.readyState === WebSocket.OPEN) {
           viewer.send(data, { binary: Boolean(isBinary) });
         }

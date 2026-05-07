@@ -5,6 +5,7 @@ const [, , cmd] = process.argv;
 
 if (cmd === "doctor") {
   console.log("atrium doctor: Node", process.version);
+  console.log("Full UI demo: pnpm demo (from repo root) — see packages/demo/README.md");
   console.log("Run the worker with: pnpm --filter @atrium/worker start");
   console.log("Set ATRIUM_WORKER_DRY=1 for smoke tests without Chromium.");
   process.exit(0);

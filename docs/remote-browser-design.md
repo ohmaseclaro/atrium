@@ -6,6 +6,8 @@
 
 **Implementation defaults in this repository:** API nodes use the **dial** pattern (open WebSocket to the worker backplane), and workers drive Chromium with **Playwright** (including CDP screencast via `BrowserContext.newCDPSession`), not a hand-maintained raw CDP client.
 
+**Docs:** [Documentation hub](./README.md) · [User guide](./user-guide.md) · [Repository README](../README.md)
+
 ---
 
 ## 1. Goals and non-goals
@@ -25,7 +27,7 @@ The library ships as three independently consumable packages plus a Docker image
 
 1. A **backend middleware** that mounts onto any Express-compatible HTTP server and exposes session-management endpoints + a WebSocket relay.
 2. A **browser worker** distributed as a Docker image, scaled horizontally via BullMQ, with per-session CPU/memory caps.
-3. A **React client** that renders a Chrome-identical UI around the live CDP frame stream.
+3. A **React client** that renders the live CDP frame stream with **optional** embedded-browser chrome (tab strip, URL bar, navigation); see [`packages/react/README.md`](../packages/react/README.md).
 
 ### Non-goals
 
@@ -49,7 +51,7 @@ The library ships as three independently consumable packages plus a Docker image
 
 A few candidates with rationale; pick one before publishing the npm scope.
 
-- **Atrium** — an entry hall where visitors authenticate before being admitted further. Clean, memorable, evokes the credential-handoff use case without being on-the-nose. *Recommended.*
+- **Atrium** — an entry hall where visitors authenticate before being admitted further. Clean, memorable, evokes the credential-handoff use case without being on-the-nose. _Recommended._
 - **Usher** — guides the user through the auth flow, hands them off, hands back. Strong verb energy.
 - **Threshold** — the moment of crossing from "agent" to "human" and back. Slightly abstract.
 - **Cabin** — a small private space; nice metaphor for credential entry being shielded.
@@ -61,13 +63,14 @@ For the rest of this document I will use **Atrium** as the placeholder name. Rep
 
 Package layout under the chosen scope (`@atrium/*` shown):
 
-| Package | Purpose |
-|---|---|
-| `@atrium/protocol` | Wire protocol types, shared across all packages |
-| `@atrium/server` | Express-compatible middleware (the backend entry point) |
-| `@atrium/worker` | Browser worker process; published as both an npm package and a Docker image |
-| `@atrium/react` | React components and hooks (the client entry point) |
-| `@atrium/cli` | Optional dev tool for running a local stack |
+| Package            | Purpose                                                                     |
+| ------------------ | --------------------------------------------------------------------------- |
+| `@atrium/protocol` | Wire protocol types, shared across all packages                             |
+| `@atrium/server`   | Express-compatible middleware (the backend entry point)                     |
+| `@atrium/worker`   | Browser worker process; published as both an npm package and a Docker image |
+| `@atrium/react`    | React components and hooks (the client entry point)                         |
+| `@atrium/cli`      | Optional dev tool for running a local stack                                 |
+| `@atrium/demo`     | Full-stack demo app (Vite + Express) exercising the packages above          |
 
 ---
 
@@ -97,12 +100,14 @@ Package layout under the chosen scope (`@atrium/*` shown):
 ### Component responsibilities
 
 **React client (`@atrium/react`)**
+
 - Renders frames received over WebSocket onto a `<canvas>`.
 - Captures pointer/keyboard/scroll/IME events and forwards them to the server.
-- Renders the Chrome-identical chrome (back/forward/reload/URL bar/lock indicator).
+- Optionally renders embedded-browser chrome (back/forward/reload, URL bar, tab strip); see shipped [`@atrium/react`](../packages/react/README.md).
 - Reflects control state; disables input when locked to the agent.
 
 **API server / middleware (`@atrium/server`)**
+
 - HTTP endpoints for session lifecycle (create, get, destroy, navigate, extract cookies).
 - WebSocket endpoint that proxies the live frame stream and input events between client and worker.
 - Enforces auth via host-provided hook.
@@ -111,6 +116,7 @@ Package layout under the chosen scope (`@atrium/*` shown):
 - Stateless; can run behind any load balancer.
 
 **Worker (`@atrium/worker`)**
+
 - BullMQ consumer; pulls session-create jobs.
 - Spawns a headful Chromium under Xvfb (or headless with stealth — configurable per job).
 - Attaches to the Chromium via CDP, starts `Page.startScreencast`.
@@ -119,6 +125,7 @@ Package layout under the chosen scope (`@atrium/*` shown):
 - Enforces per-session resource caps via cgroups (Docker `--memory`, `--cpus`) at the container level, plus per-Chromium `--memory-pressure-off=false` and `prlimit` for tighter bounds.
 
 **Redis**
+
 - BullMQ queues (`atrium:sessions:create`, `atrium:sessions:destroy`).
 - Worker registry (`atrium:workers:<id>` with TTL).
 - Session registry (`atrium:sessions:<id>` mapping to worker URL + state).
@@ -137,17 +144,18 @@ atrium/
 │   ├── server/               # Express middleware
 │   ├── worker/               # browser worker
 │   ├── react/                # React UI
-│   └── cli/                  # dev convenience CLI
+│   ├── cli/                  # dev convenience CLI
+│   └── demo/                 # full-stack demo (see packages/demo/README.md)
 ├── docker/
 │   └── worker/
-│       ├── Dockerfile
-│       └── entrypoint.sh
+│       └── Dockerfile
 ├── examples/
-│   ├── express-host/         # minimal host app using @atrium/server
-│   ├── nextjs-app/           # Next.js + @atrium/react demo
-│   └── docker-compose.yml    # local dev: redis + worker + example host
+│   ├── express-host/         # minimal host app using @atrium/server only
+│   ├── nextjs-app/           # (planned) Next.js + @atrium/react demo
+│   └── docker-compose.yml    # (planned) local dev: redis + worker + example host
 └── docs/
-    └── DESIGN.md             # this document
+    ├── remote-browser-design.md
+    └── artifacts/            # spec, progress, sprint-bundle.json, sprints/sprint-*/
 ```
 
 ---
@@ -184,16 +192,16 @@ Only `agent` or `human` may hold the input writer slot. Default on create is `ag
 
 ### 5.2 HTTP endpoints
 
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/sessions` | Create a new session (returns `{sessionId, viewerToken, wsUrl}`). |
-| `GET` | `/sessions/:id` | Inspect state (status, controlHolder, urls visited, idle timer). |
-| `DELETE` | `/sessions/:id` | Terminate. |
-| `POST` | `/sessions/:id/navigate` | Server-side navigation (URL allowlist enforced if configured). |
-| `POST` | `/sessions/:id/control` | Body: `{action: "grant"|"release", to: "human"|"agent"}`. |
-| `GET` | `/sessions/:id/cookies` | Extract cookies (server-only; never exposed to the React client). |
-| `GET` | `/sessions/:id/storage-state` | Full Playwright-format storage state. |
-| `GET` | `/healthz`, `/readyz` | Operational probes. |
+| Method   | Path                          | Purpose                                                           |
+| -------- | ----------------------------- | ----------------------------------------------------------------- | ---------------------- | ---------- |
+| `POST`   | `/sessions`                   | Create a new session (returns `{sessionId, viewerToken, wsUrl}`). |
+| `GET`    | `/sessions/:id`               | Inspect state (status, controlHolder, urls visited, idle timer).  |
+| `DELETE` | `/sessions/:id`               | Terminate.                                                        |
+| `POST`   | `/sessions/:id/navigate`      | Server-side navigation (URL allowlist enforced if configured).    |
+| `POST`   | `/sessions/:id/control`       | Body: `{action: "grant"                                           | "release", to: "human" | "agent"}`. |
+| `GET`    | `/sessions/:id/cookies`       | Extract cookies (server-only; never exposed to the React client). |
+| `GET`    | `/sessions/:id/storage-state` | Full Playwright-format storage state.                             |
+| `GET`    | `/healthz`, `/readyz`         | Operational probes.                                               |
 
 ### 5.3 WebSocket: `/sessions/:id/stream`
 
@@ -204,14 +212,14 @@ Client connects with `?token=<viewerToken>`. The token is short-lived (5 min def
 ```ts
 type ServerMessage =
   | { t: "hello"; sessionId: string; control: ControlState; viewport: { w: number; h: number } }
-  | { t: "frame"; seq: number; ts: number /* ms */; mime: "image/jpeg" }   // followed by binary payload
+  | { t: "frame"; seq: number; ts: number /* ms */; mime: "image/jpeg" } // followed by binary payload
   | { t: "control"; holder: "agent" | "human" | "idle"; reason?: string }
-  | { t: "navigate"; url: string }                                          // page-level navigation
+  | { t: "navigate"; url: string } // page-level navigation
   | { t: "title"; title: string }
   | { t: "favicon"; href: string | null }
   | { t: "cursor"; cursor: CSSCursor }
   | { t: "loading"; loading: boolean; progress?: number }
-  | { t: "viewport"; w: number; h: number }                                 // resize ack
+  | { t: "viewport"; w: number; h: number } // resize ack
   | { t: "error"; code: string; message: string }
   | { t: "bye"; reason: "destroyed" | "idle" | "evicted" | "error" };
 ```
@@ -263,25 +271,32 @@ import { atrium } from "@atrium/server";
 
 const app = express();
 
-app.use("/atrium", atrium({
-  redis: { url: process.env.REDIS_URL! },
-  authorize: async (req) => {
-    // Host-app responsibility. Return a tenant/user identifier or throw.
-    const user = await myAuthLayer(req);
-    return { tenantId: user.orgId, userId: user.id };
-  },
-  policies: {
-    sessionTtlMs: 15 * 60_000,
-    idleTtlMs: 5 * 60_000,
-    maxConcurrentSessionsPerTenant: 5,
-    urlAllowlist: ["*"],          // or e.g. ["https://accounts.google.com/*"]
-    defaultViewport: { w: 1280, h: 800 },
-  },
-  hooks: {
-    onSessionCreated: async (s) => { /* analytics */ },
-    onCredentialsCollected: async (s, cookies) => { /* persist */ },
-  },
-}));
+app.use(
+  "/atrium",
+  atrium({
+    redis: { url: process.env.REDIS_URL! },
+    authorize: async (req) => {
+      // Host-app responsibility. Return a tenant/user identifier or throw.
+      const user = await myAuthLayer(req);
+      return { tenantId: user.orgId, userId: user.id };
+    },
+    policies: {
+      sessionTtlMs: 15 * 60_000,
+      idleTtlMs: 5 * 60_000,
+      maxConcurrentSessionsPerTenant: 5,
+      urlAllowlist: ["*"], // or e.g. ["https://accounts.google.com/*"]
+      defaultViewport: { w: 1280, h: 800 },
+    },
+    hooks: {
+      onSessionCreated: async (s) => {
+        /* analytics */
+      },
+      onCredentialsCollected: async (s, cookies) => {
+        /* persist */
+      },
+    },
+  }),
+);
 ```
 
 The middleware mounts:
@@ -386,16 +401,16 @@ type CreateSessionJob = {
   config: {
     viewport: { w: number; h: number };
     initialUrl?: string;
-    storageState?: PlaywrightStorageState;   // resume an authenticated session
-    headful: boolean;                        // true when anti-bot evasion needed
+    storageState?: PlaywrightStorageState; // resume an authenticated session
+    headful: boolean; // true when anti-bot evasion needed
     proxy?: { server: string; username?: string; password?: string };
     userAgent?: string;
     locale?: string;
     timezone?: string;
   };
   limits: {
-    cpuShares: number;     // relative CPU weight
-    memoryMb: number;      // hard RSS cap
+    cpuShares: number; // relative CPU weight
+    memoryMb: number; // hard RSS cap
     sessionTtlMs: number;
     idleTtlMs: number;
   };
@@ -487,7 +502,7 @@ Quality and `everyNthFrame` are tuned per session (see §9). Default 12 fps, q=7
 
 ```ts
 function onClientInput(msg: ClientMessage) {
-  if (!hasWriterLock(msg.from)) return;             // server-authoritative
+  if (!hasWriterLock(msg.from)) return; // server-authoritative
   switch (msg.kind) {
     case "mouse":
       cdp.send("Input.dispatchMouseEvent", normalizeMouse(msg.event));
@@ -577,23 +592,25 @@ function MyAuthFlow({ session }) {
 }
 ```
 
-The component renders a Chrome-identical chrome (toolbar with back/forward/reload, URL bar, lock indicator) plus the page canvas, and a small footer status strip.
+The component renders the page canvas; optional presets add a toolbar (back/forward/reload), read-only URL bar, and tab strip. A small session status line can be toggled separately (`showSessionStatus`).
 
 ### 8.2 Hook for advanced layouts
 
 ```tsx
 const {
-  status,                  // "connecting" | "ready" | "active" | "terminated"
-  controlHolder,           // "agent" | "human" | "idle"
-  url,                     // current page URL
-  title,                   // current page title
-  loading,                 // boolean
-  requestControl,          // () => void
-  releaseControl,          // () => void
-  navigate,                // (url: string) => void
-  back, forward, reload,
-  canvasRef,               // attach to <canvas>
-  inputProps,              // spread onto a focusable wrapper for input capture
+  status, // "connecting" | "ready" | "active" | "terminated"
+  controlHolder, // "agent" | "human" | "idle"
+  url, // current page URL
+  title, // current page title
+  loading, // boolean
+  requestControl, // () => void
+  releaseControl, // () => void
+  navigate, // (url: string) => void
+  back,
+  forward,
+  reload,
+  canvasRef, // attach to <canvas>
+  inputProps, // spread onto a focusable wrapper for input capture
 } = useSession({ sessionId, viewerToken, wsUrl });
 ```
 
@@ -620,16 +637,16 @@ Wrapping the canvas in a focusable `<div tabIndex={0} onKeyDown onMouseMove onPo
 - **Clipboard paste**: capture `paste` events, send the text via `Input.insertText`. Clipboard read access is gated by browser permissions and is handled gracefully if denied.
 - **Focus tracking**: on `blur` the client sends a `release_input_focus` so stuck modifier keys can be cleared server-side.
 
-### 8.5 Chrome-identical chrome
+### 8.5 Optional embedded-browser chrome
 
-The toolbar matches Chrome's visual language closely enough to feel native to users (so they're comfortable typing credentials) without infringing on Google's marks:
+The shipped **`@atrium/react`** viewer uses a neutral, Chrome-_like_ layout (not a Google trademark) so users feel comfortable typing credentials. **Implemented today:** back / forward / reload, read-only URL bar (`navigate` / `title` messages), tab strip when the worker emits **`tabs`**, optional session status line, and presets **`none` / `minimal` / `full`** plus per-flag overrides (see [`packages/react/README.md`](../packages/react/README.md)).
 
-- Back / forward / reload icons (Chrome-style but using our own SVGs)
-- URL bar with lock / not-secure indicator (server tells us via `navigate` message; we re-derive HTTPS state from the URL)
-- Loading progress bar (thin, top of canvas, animated 0→100 from `loading` messages)
-- A small status pill on the right showing **who is in control**: "Agent typing…" or "Your turn" or "View only"
+**Target / incremental polish** (design intent; not all are in the default UI yet):
 
-This control pill is the most important UI element. Users need to know unambiguously when their input is being captured. When `controlHolder === "agent"`, the canvas wrapper has `pointer-events: none` and `aria-disabled` is set; an overlay says "The agent is controlling this browser. Click 'Take over' to enter your credentials."
+- Lock / not-secure affordance in the URL bar (derive from URL + wire messages).
+- Loading progress from `loading` messages.
+- A dedicated **control** pill (“Agent typing…” / “Your turn”) — today, apps can use `onControlChange` + `showSessionStatus` or wrap the canvas.
+- When `controlHolder === "agent"`, disable pointer events on the canvas and show an explicit overlay (host-specific copy is recommended).
 
 ### 8.6 Reconnect behavior
 
@@ -773,28 +790,30 @@ Kubernetes deploys are straightforward — workers as a `Deployment` with HPA on
 
 These are deliberately left for the implementation team to decide based on context. Each has a recommended default but warrants discussion before v1.
 
-| # | Decision | Recommended default | Tradeoff |
-|---|---|---|---|
-| 1 | API ↔ Worker pattern (push vs dial) | Dial (B) | A is simpler at one node; B scales cleaner. |
-| 2 | Browser orchestrator (Playwright vs raw CDP) | Playwright | Playwright adds a dep but gives us context isolation, `storage_state`, network interception. Raw CDP is leaner. |
-| 3 | Storage backend beyond Redis | None in v1 | If we add session history / audit logs, we'll need Postgres. Defer. |
-| 4 | Multi-viewer support | Yes, view-only extras allowed | Useful for support flows; minor complexity. |
-| 5 | Mobile emulation | Out of scope for v1 | Touch-event mapping is non-trivial; defer. |
-| 6 | Anti-bot stealth tooling (puppeteer-extra-plugin-stealth-style patches) | Off by default, opt-in flag | Stealth patches are an arms race; default to clean Chromium. |
-| 7 | Built-in URL allowlist UI in client | No | Allowlisting is a server policy; surfacing in UI muddies the model. |
-| 8 | Frame transport upgrade path to WebRTC | Plan v2 hook, not v1 implementation | Future-proofing the protocol so we can swap transports without breaking clients. |
+| #   | Decision                                                                | Recommended default                 | Tradeoff                                                                                                        |
+| --- | ----------------------------------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 1   | API ↔ Worker pattern (push vs dial)                                     | Dial (B)                            | A is simpler at one node; B scales cleaner.                                                                     |
+| 2   | Browser orchestrator (Playwright vs raw CDP)                            | Playwright                          | Playwright adds a dep but gives us context isolation, `storage_state`, network interception. Raw CDP is leaner. |
+| 3   | Storage backend beyond Redis                                            | None in v1                          | If we add session history / audit logs, we'll need Postgres. Defer.                                             |
+| 4   | Multi-viewer support                                                    | Yes, view-only extras allowed       | Useful for support flows; minor complexity.                                                                     |
+| 5   | Mobile emulation                                                        | Out of scope for v1                 | Touch-event mapping is non-trivial; defer.                                                                      |
+| 6   | Anti-bot stealth tooling (puppeteer-extra-plugin-stealth-style patches) | Off by default, opt-in flag         | Stealth patches are an arms race; default to clean Chromium.                                                    |
+| 7   | Built-in URL allowlist UI in client                                     | No                                  | Allowlisting is a server policy; surfacing in UI muddies the model.                                             |
+| 8   | Frame transport upgrade path to WebRTC                                  | Plan v2 hook, not v1 implementation | Future-proofing the protocol so we can swap transports without breaking clients.                                |
 
 ---
 
 ## 13. Roadmap (suggested)
 
 **v0.1 — Walking skeleton (2–3 weeks)**
+
 - Single worker, no BullMQ (just direct WS).
 - One Chromium per worker.
 - React client with basic toolbar and canvas rendering.
 - Manual handoff via host-side button.
 
 **v0.2 — Scale path (2–3 weeks)**
+
 - BullMQ queue + multi-worker.
 - Capacity allocator.
 - Reconnect handling.
@@ -802,6 +821,7 @@ These are deliberately left for the implementation team to decide based on conte
 - Docker image published.
 
 **v0.3 — Production-ready (3–4 weeks)**
+
 - Resource caps wired (memory watchdog, CPU shares).
 - Credential-safety logging path.
 - mTLS API↔worker.
@@ -809,6 +829,7 @@ These are deliberately left for the implementation team to decide based on conte
 - Frame-rate adaptation.
 
 **v0.4 — Polish (2 weeks)**
+
 - IME, paste, key repeat edge cases.
 - Multi-viewer support.
 - Observability (Prometheus metrics, OpenTelemetry traces).
@@ -828,8 +849,7 @@ export type ControlState = {
   since: number;
 };
 
-export type SessionStatus =
-  | "pending" | "ready" | "active" | "terminated" | "failed";
+export type SessionStatus = "pending" | "ready" | "active" | "terminated" | "failed";
 
 export type SessionSummary = {
   id: string;
@@ -863,7 +883,9 @@ export type ClientMessage =
   | { t: "ime"; text: string; isComposing: boolean }
   | { t: "resize"; w: number; h: number }
   | { t: "navigate"; url: string }
-  | { t: "back" } | { t: "forward" } | { t: "reload" }
+  | { t: "back" }
+  | { t: "forward" }
+  | { t: "reload" }
   | { t: "request_control" }
   | { t: "release_control" }
   | { t: "ping" };

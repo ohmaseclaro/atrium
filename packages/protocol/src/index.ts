@@ -49,6 +49,17 @@ export const serverMessageSchema = z.discriminatedUnion("t", [
   }),
   z.object({ t: z.literal("viewport"), w: z.number(), h: z.number() }),
   z.object({
+    t: z.literal("tabs"),
+    tabs: z.array(
+      z.object({
+        id: z.string(),
+        url: z.string(),
+        title: z.string(),
+        active: z.boolean(),
+      }),
+    ),
+  }),
+  z.object({
     t: z.literal("error"),
     code: z.string(),
     message: z.string(),
@@ -79,6 +90,8 @@ export const clientMessageSchema = z.union([
   z.object({ t: z.literal("request_control") }),
   z.object({ t: z.literal("release_control") }),
   z.object({ t: z.literal("ping") }),
+  z.object({ t: z.literal("tab_activate"), tabId: z.string() }),
+  z.object({ t: z.literal("tab_close"), tabId: z.string() }),
 ]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
@@ -89,3 +102,39 @@ export function parseServerMessage(data: unknown): ServerMessage {
 export function parseClientMessage(data: unknown): ClientMessage {
   return clientMessageSchema.parse(data);
 }
+
+/**
+ * Optional body for `POST /sessions` — applied on the worker before the first viewer WebSocket connects.
+ * Shape matches Playwright `BrowserContextOptions.storageState` plus optional extra cookies and start URL.
+ */
+export const sessionBootstrapBodySchema = z
+  .object({
+    storageState: z.unknown().optional(),
+    cookies: z.array(z.record(z.unknown())).optional(),
+    initialUrl: z.string().min(1).optional(),
+    viewport: z
+      .object({
+        w: z.number().int().positive(),
+        h: z.number().int().positive(),
+      })
+      .optional(),
+  })
+  .strict();
+export type SessionBootstrapBody = z.infer<typeof sessionBootstrapBodySchema>;
+
+/**
+ * Combined export from the browser (cookies + Playwright `storageState`) or apply payload for an existing session.
+ */
+export const sessionSnapshotApplyBodySchema = z
+  .object({
+    storageState: z.unknown().optional(),
+    cookies: z.array(z.record(z.unknown())).optional(),
+  })
+  .strict()
+  .refine(
+    (b) =>
+      (b.cookies?.length ?? 0) > 0 ||
+      (b.storageState != null && typeof b.storageState === "object"),
+    { message: "provide_storageState_or_cookies" },
+  );
+export type SessionSnapshotApplyBody = z.infer<typeof sessionSnapshotApplyBodySchema>;

@@ -1,0 +1,37 @@
+{
+  "name": "@atrium/demo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Full-stack demo: @atrium/server + @atrium/react + defaults (worker on 7070)",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n worker,web -c blue,magenta \"pnpm run dev:worker\" \"pnpm run dev:web\"",
+    "dev:worker": "pnpm --filter @atrium/worker start",
+    "dev:web": "wait-on -t 120000 http-get://127.0.0.1:7070 && tsx server/dev-server.ts",
+    "dev:ui-only": "tsx server/dev-server.ts",
+    "build": "vite build && tsc -p server/tsconfig.json --pretty false",
+    "start": "NODE_ENV=production node dist/server/prod-server.js",
+    "lint": "pnpm run typecheck",
+    "typecheck": "pnpm --filter @atrium/protocol build && pnpm --filter @atrium/react build && tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@atrium/protocol": "workspace:*",
+    "@atrium/react": "workspace:*",
+    "@atrium/server": "workspace:*",
+    "express": "^4.21.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.6",
+    "wait-on": "^8.0.1"
+  }
+}

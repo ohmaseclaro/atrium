@@ -9,7 +9,30 @@
   },
   "scripts": {
     "build": "pnpm -r run build",
-    "lint": "pnpm -r run lint",
-    "clean": "pnpm -r exec rm -rf dist"
+    "lint": "eslint . --max-warnings 0 && prettier --check . && pnpm -r --if-present run typecheck",
+    "lint:fix": "eslint . --fix --max-warnings 0 && prettier --write .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "pnpm -r exec rm -rf dist",
+    "demo": "pnpm --filter @atrium/demo dev"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.16.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.2.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.16.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "globals": "^15.13.0",
+    "jsdom": "^25.0.1",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.1",
+    "vitest": "^3.0.5"
   }
 }

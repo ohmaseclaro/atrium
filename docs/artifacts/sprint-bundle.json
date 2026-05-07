@@ -1,0 +1,240 @@
+{
+  "spec": {
+    "productObjective": "Ship Atrium remote browser: dial worker topology, Playwright automation, Express middleware, React viewer, internal worker HTTP for cookies and storage_state, URL allowlist, reconnect replay, adaptive JPEG, optional TLS on dial, and documented sprint artifacts.",
+    "userStories": [
+      "As a backend engineer, I can mount Express middleware with session lifecycle, control handoff, navigate with allowlist, and cookie extraction so my app can orchestrate human auth safely.",
+      "As a frontend engineer, I can embed RemoteBrowser and reconnect with replayed server JSON so users recover from network blips.",
+      "As a platform engineer, I can tune worker memory caps and JPEG quality under backpressure so fleet capacity stays predictable."
+    ],
+    "constraints": [
+      "MIT public source; secrets only via env.",
+      "Cookies and storage_state only on host-authenticated HTTP, never on viewer WebSocket."
+    ],
+    "assumptions": ["Node 20 plus pnpm; Playwright Chromium for non-dry workers."],
+    "architectureNotes": "API dials worker WS for frames; worker exposes internal HTTP for navigate, cookies, storage_state; session replay ring buffers JSON on API relay; adaptive screencast restarts CDP screencast when quality knobs change.",
+    "dependencyNotes": "Express 4, ws 8, Playwright 1.49, Zod 3, React 18, Vitest 3, ESLint 9, Prettier 3.",
+    "nonGoals": [
+      "BullMQ multi-worker fleet allocator in this milestone (documented for next phase).",
+      "Hosted identity billing product."
+    ],
+    "testStrategyBullets": [
+      "pnpm test runs Vitest workspace for protocol, server, worker, react.",
+      "pnpm lint runs ESLint plus Prettier check plus recursive tsc typecheck."
+    ],
+    "rolloutNotes": "",
+    "rollbackNotes": "",
+    "definitionOfDone": "Sprint 1-3 contract items implemented or explicitly deferred in sprint docs with evidence; CI green on lint test build."
+  },
+  "progress": {
+    "currentSprint": 3,
+    "completedWork": [
+      "Sprint 1 HTTP surface: sessions, control, navigate, cookies, storage-state, health probes.",
+      "Sprint 1 viewer relay with JSON replay buffer for reconnect.",
+      "Sprint 2 worker internal HTTP plus shared Playwright session registry.",
+      "Sprint 3 adaptive JPEG under WebSocket backpressure plus optional process memory eviction hook.",
+      "Sprint 3 optional workerTls passed to upstream WebSocket dial."
+    ],
+    "pendingWork": [
+      "BullMQ create-session queue plus multi-worker Lua allocator.",
+      "Credential redaction in structured logs for password focus (worker detection path).",
+      "mTLS client certs for worker dial beyond rejectUnauthorized toggle."
+    ],
+    "decisions": [
+      "Use in-memory session store by default; Redis persistence flag reserved on AtriumConfig without hard dependency in repo tests."
+    ],
+    "risks": ["Fleet BullMQ rollout needs staging soak before production traffic."],
+    "nextStep": "Prototype BullMQ session-create flow behind feature flag and wire Redis capacity script.",
+    "handoffNotes": ""
+  },
+  "sprints": [
+    {
+      "sprint": {
+        "sprintNumber": 1,
+        "sprintGoal": "Walking skeleton: protocol, Express session API, dial relay, React viewer, demo host, security notes.",
+        "tasks": [
+          {
+            "id": "T1",
+            "title": "Protocol schemas for wire messages",
+            "doneWhen": "Zod schemas cover server and client envelopes used by skeleton and dist builds clean.",
+            "evidenceRequired": "pnpm --filter @atrium/protocol build and Vitest protocol suite green.",
+            "dependencies": [],
+            "riskNotes": ""
+          },
+          {
+            "id": "T2",
+            "title": "Express routes for session lifecycle",
+            "doneWhen": "POST GET DELETE sessions plus control navigate cookies storage-state return documented status codes with authorize hook enforced.",
+            "evidenceRequired": "Vitest middleware tests and manual curl snippets in README.",
+            "dependencies": ["T1"],
+            "riskNotes": ""
+          },
+          {
+            "id": "T3",
+            "title": "Viewer WebSocket relay with replay buffer",
+            "doneWhen": "API dials worker and copies binary plus JSON frames while appending allowlisted replay JSON for reconnect.",
+            "evidenceRequired": "Vitest relay integration test passes against mock worker.",
+            "dependencies": ["T2"],
+            "riskNotes": ""
+          }
+        ]
+      },
+      "contract": {
+        "inScope": ["Protocol", "Express routes", "Dial relay", "React RemoteBrowser", "Demo app"],
+        "outOfScope": ["BullMQ", "Fleet allocator", "mTLS client certs"],
+        "evidenceMatrix": [
+          { "contractItem": "Session API", "requiredEvidence": "Vitest plus README curl examples" }
+        ],
+        "evaluatorChecklist": ["pnpm test passes", "pnpm demo runs with worker plus UI"],
+        "agreementStatus": "approved"
+      },
+      "evaluation": {
+        "verdictPlaceholder": "PASS",
+        "scoringCriteria": [
+          {
+            "name": "API completeness",
+            "description": "Measures coverage of design HTTP table for skeleton scope",
+            "maxScore": "5"
+          }
+        ],
+        "criterionDetails": [
+          {
+            "criterionName": "API completeness",
+            "notes": "Score 5 when all skeleton routes exist and tests cover happy paths."
+          }
+        ],
+        "evidenceRefsSectionIntro": "Link evidence artifacts here.",
+        "failureNotesSectionIntro": "Document failures and severity here.",
+        "repairInstructionsSectionIntro": "List repair steps here."
+      }
+    },
+    {
+      "sprint": {
+        "sprintNumber": 2,
+        "sprintGoal": "Scale path: worker internal HTTP, shared Playwright sessions, Redis-ready config hooks, Docker image.",
+        "tasks": [
+          {
+            "id": "T1",
+            "title": "Worker internal HTTP for navigate cookies storage-state",
+            "doneWhen": "Worker serves authenticated internal routes on same port as WS upgrade and Playwright context answers cookie and storage calls.",
+            "evidenceRequired": "Vitest worker dry tests plus live worker manual checklist in README.",
+            "dependencies": [],
+            "riskNotes": ""
+          },
+          {
+            "id": "T2",
+            "title": "Session registry with destroy on viewer close",
+            "doneWhen": "Each sessionId maps to one Playwright context; closing viewer destroys runtime so next dial recreates cleanly.",
+            "evidenceRequired": "Code review pointer to sessions map in worker index.",
+            "dependencies": ["T1"],
+            "riskNotes": ""
+          },
+          {
+            "id": "T3",
+            "title": "Document BullMQ plus allocator follow-up",
+            "doneWhen": "Sprint-2 contract defers BullMQ with explicit next-step in progress.md pendingWork list.",
+            "evidenceRequired": "docs/artifacts/progress.md lists BullMQ as pending.",
+            "dependencies": [],
+            "riskNotes": ""
+          }
+        ]
+      },
+      "contract": {
+        "inScope": ["Worker internal REST", "Shared browser runtime", "Dockerfile reference"],
+        "outOfScope": ["BullMQ consumer in API", "Redis cluster tuning"],
+        "evidenceMatrix": [
+          {
+            "contractItem": "Internal worker routes",
+            "requiredEvidence": "curl against running worker with bearer secret"
+          }
+        ],
+        "evaluatorChecklist": [
+          "Navigate updates active tab",
+          "Cookies endpoint returns JSON array"
+        ],
+        "agreementStatus": "approved"
+      },
+      "evaluation": {
+        "verdictPlaceholder": "PASS",
+        "scoringCriteria": [
+          {
+            "name": "Operability",
+            "description": "Measures whether internal routes work under load smoke",
+            "maxScore": "5"
+          }
+        ],
+        "criterionDetails": [
+          {
+            "criterionName": "Operability",
+            "notes": "Score 5 when demo can POST navigate and GET cookies after session start."
+          }
+        ],
+        "evidenceRefsSectionIntro": "Link evidence artifacts here.",
+        "failureNotesSectionIntro": "Document failures and severity here.",
+        "repairInstructionsSectionIntro": "List repair steps here."
+      }
+    },
+    {
+      "sprint": {
+        "sprintNumber": 3,
+        "sprintGoal": "Production readiness: URL allowlist on navigate, adaptive JPEG, optional TLS dial knob, memory eviction hook.",
+        "tasks": [
+          {
+            "id": "T1",
+            "title": "URL allowlist enforcement on navigate",
+            "doneWhen": "POST navigate rejects URLs outside policies.urlAllowlist with HTTP 400 and stable error body.",
+            "evidenceRequired": "Vitest url-allowlist plus middleware navigate rejection test.",
+            "dependencies": [],
+            "riskNotes": ""
+          },
+          {
+            "id": "T2",
+            "title": "Adaptive screencast under backpressure",
+            "doneWhen": "Worker skips frame send when viewer bufferedAmount high and retunes JPEG quality at bounded rate.",
+            "evidenceRequired": "Code review of Page.screencastFrame handler in worker index.",
+            "dependencies": [],
+            "riskNotes": ""
+          },
+          {
+            "id": "T3",
+            "title": "Optional TLS and memory soft cap",
+            "doneWhen": "AtriumConfig.workerTls forwards to upstream WebSocket; worker options.memorySoftCapBytes drives periodic eviction.",
+            "evidenceRequired": "types.ts and worker startWorkerServer options documented in README.",
+            "dependencies": [],
+            "riskNotes": ""
+          }
+        ]
+      },
+      "contract": {
+        "inScope": ["Allowlist", "Adaptive JPEG", "TLS knob", "Memory hook"],
+        "outOfScope": ["Full cgroup per session", "SOC2 audit pack"],
+        "evidenceMatrix": [
+          {
+            "contractItem": "Allowlist",
+            "requiredEvidence": "Automated middleware test for blocked URL"
+          }
+        ],
+        "evaluatorChecklist": ["Navigate blocked returns 400", "workerTls type exported"],
+        "agreementStatus": "approved"
+      },
+      "evaluation": {
+        "verdictPlaceholder": "PASS",
+        "scoringCriteria": [
+          {
+            "name": "Safety",
+            "description": "Measures policy enforcement on server-driven navigation",
+            "maxScore": "5"
+          }
+        ],
+        "criterionDetails": [
+          {
+            "criterionName": "Safety",
+            "notes": "Score 5 when disallowed hosts never reach worker navigate handler."
+          }
+        ],
+        "evidenceRefsSectionIntro": "Link evidence artifacts here.",
+        "failureNotesSectionIntro": "Document failures and severity here.",
+        "repairInstructionsSectionIntro": "List repair steps here."
+      }
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import type { Request } from "express";
+import type { ControlHolder, SessionStatus } from "@atrium/protocol";
 
 export type Principal = {
   tenantId: string;
@@ -20,10 +21,8 @@ export type AtriumHooks = {
     tenantId: string;
     userId: string;
   }) => void | Promise<void>;
-  onSessionTerminated?: (summary: {
-    sessionId: string;
-    reason: string;
-  }) => void | Promise<void>;
+  onSessionTerminated?: (summary: { sessionId: string; reason: string }) => void | Promise<void>;
+  onControlChange?: (summary: { sessionId: string; holder: ControlHolder }) => void | Promise<void>;
 };
 
 export type AtriumConfig = {
@@ -37,10 +36,12 @@ export type AtriumConfig = {
    * The API opens outbound WebSockets to `${workerDialBase}/internal/stream/:sessionId` (dial pattern).
    */
   workerDialBase: string;
-  /** Shared secret sent as Authorization: Bearer on API→worker WebSockets. */
+  /** Shared secret sent as Authorization: Bearer on API→worker WebSockets and internal HTTP. */
   workerSharedSecret: string;
   /** HTTP path prefix where routes mount (no trailing slash). */
   mountPath?: string;
+  /** Optional TLS options for the API→worker WebSocket dial (e.g. private CA in staging). */
+  workerTls?: { rejectUnauthorized?: boolean };
 };
 
 export type SessionRecord = {
@@ -50,4 +51,9 @@ export type SessionRecord = {
   viewerToken: string;
   viewerTokenExpiresAt: number;
   createdAt: number;
+  status: SessionStatus;
+  control: { holder: ControlHolder; since: number };
+  currentUrl: string;
+  /** Recent JSON text frames (`hello`, `control`, `navigate`, `title`, `viewport`, `loading`, `tabs`) for viewer reconnect replay. */
+  replayJson: string[];
 };

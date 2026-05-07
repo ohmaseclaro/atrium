@@ -7,3 +7,5 @@ export type {
   Principal,
   SessionRecord,
 } from "./types.js";
+export { urlAllowed } from "./url-allowlist.js";
+export { workerHttpBaseFromDial, workerInternalFetch } from "./worker-client.js";
