@@ -354,6 +354,19 @@ async function emitActiveNavigateTitle(live: LiveSession): Promise<void> {
   sendJson(live.sink, { t: "title", title });
 }
 
+/**
+ * Emit a `viewport` JSON message reflecting the active page's actual size so the viewer
+ * scales pointer events correctly even when popups (e.g. OAuth windows) have a different
+ * viewport from the original tab.
+ */
+function emitActiveViewport(live: LiveSession): void {
+  const pg = live.tabIds.get(live.activeTabId);
+  if (!pg) return;
+  const vp = pg.viewportSize();
+  if (!vp) return;
+  sendJson(live.sink, { t: "viewport", w: vp.width, h: vp.height });
+}
+
 function wireTabPage(live: LiveSession, tabId: string, page: Page): void {
   page.on("framenavigated", () => {
     scheduleTabsBroadcast(live);
@@ -390,6 +403,7 @@ async function switchActiveTab(live: LiveSession, tabId: string): Promise<void> 
   live.cdp = await live.context.newCDPSession(pg);
   await startScreencastPipeline(live);
   scheduleTabsBroadcast(live);
+  emitActiveViewport(live);
   await emitActiveNavigateTitle(live);
 }
 

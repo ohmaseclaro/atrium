@@ -119,6 +119,9 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
             setHolder(msg.holder);
             onControlChangeRef.current?.(msg.holder);
           }
+          if (msg.t === "viewport") {
+            setViewport({ w: msg.w, h: msg.h });
+          }
           if (msg.t === "tabs") {
             setTabs(msg.tabs);
           }
