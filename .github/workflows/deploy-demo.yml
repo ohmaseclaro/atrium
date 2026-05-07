@@ -54,6 +54,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check SSH secrets are configured
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -e
+          missing=0
+          if [ -z "$SSH_HOST" ]; then
+            echo "::error::SSH_HOST is empty. Add a repository or **demo** environment secret (Settings → Secrets and variables → Actions). Value = your VPS IP or DNS name — do not commit it to the repo."
+            missing=1
+          fi
+          if [ -z "$SSH_USER" ]; then
+            echo "::error::SSH_USER is empty. Add it next to SSH_HOST (e.g. deploy)."
+            missing=1
+          fi
+          if [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "::error::SSH_PRIVATE_KEY is empty. Add the private deploy key (PEM) as a secret."
+            missing=1
+          fi
+          exit "$missing"
+
       - name: Deploy to VPS
         id: ssh-deploy
         uses: appleboy/ssh-action@v1.0.0

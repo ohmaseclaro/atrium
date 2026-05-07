@@ -73,13 +73,13 @@ There is **no Docker** requirement for the landing page or the demo Node process
 
 Workflow: `.github/workflows/deploy-demo.yml` (repository root). On pushes to `main` that touch the demo, libraries, lockfile, or **`deploy/**`**, it runs **lint → test → build**, SSHs to the VPS, runs `./deploy/update-demo.sh`, then checks **demo** (`/atrium/healthz` on loopback) and **landing** (`GET /`with`Host: atriumjs.dev`).
 
-**Secrets** (reuse the same as Capitanias on the shared VPS):
+**Secrets** — add them on **this** repository (forks do not inherit secrets from other repos). If `SSH_HOST` is missing, the deploy job fails immediately with a clear error (instead of `ssh-action`’s “missing server host”).
 
-| Secret            | Purpose                                  |
-| ----------------- | ---------------------------------------- |
-| `SSH_HOST`        | VPS hostname or IP                       |
-| `SSH_USER`        | SSH login (e.g. `deploy`)                |
-| `SSH_PRIVATE_KEY` | Deploy key with access to `/home/atrium` |
+| Secret            | Purpose                                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------------------- |
+| `SSH_HOST`        | VPS **IP or DNS name**. Must be non-empty.                                                     |
+| `SSH_USER`        | SSH login (e.g. `deploy`)                                                                      |
+| `SSH_PRIVATE_KEY` | Private deploy key (PEM) for that user, with access to the app directory (e.g. `/home/atrium`) |
 
 Optional:
 
@@ -87,7 +87,7 @@ Optional:
 | ------------------- | -------------------------------- |
 | `ATRIUM_DEPLOY_DIR` | Clone path if not `/home/atrium` |
 
-Create a **`demo`** environment in GitHub if you want approval gates; the workflow uses `environment: demo` with URL `https://atriumjs.dev`.
+The workflow uses GitHub **environment** `demo` (URL + optional protection rules). You can store secrets as **repository** secrets (Settings → Secrets and variables → Actions) or as **environment** secrets (Settings → Environments → **demo**). If you use the `demo` environment, either inherit repository secrets or duplicate `SSH_HOST` / `SSH_USER` / `SSH_PRIVATE_KEY` under that environment—otherwise they resolve empty and SSH fails.
 
 ## Manual deploy
 
