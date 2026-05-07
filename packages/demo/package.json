@@ -5,9 +5,9 @@
   "description": "Full-stack demo: @atrium/server + @atrium/react + defaults (worker on 7070)",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n worker,web -c blue,magenta \"pnpm run dev:worker\" \"pnpm run dev:web\"",
+    "dev": "node scripts/dev.mjs",
     "dev:worker": "pnpm --filter @atrium/worker start",
-    "dev:web": "wait-on -t 120000 http-get://127.0.0.1:7070 && tsx server/dev-server.ts",
+    "dev:web": "node scripts/wait-for-worker.mjs && tsx server/dev-server.ts",
     "dev:ui-only": "tsx server/dev-server.ts",
     "build": "vite build && tsc -p server/tsconfig.json --pretty false",
     "start": "NODE_ENV=production node dist/server/prod-server.js",

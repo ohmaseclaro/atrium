@@ -12,12 +12,12 @@ End-to-end demo for the Atrium monorepo. It wires **everything shipped today** t
 
 ## Defaults (no `.env` required)
 
-| Variable                  | Default                       |
-| ------------------------- | ----------------------------- |
-| `ATRIUM_WORKER_SECRET`    | `dev-secret-change-me`        |
-| `ATRIUM_WORKER_DIAL_BASE` | `ws://127.0.0.1:7070`         |
-| `PORT` (demo web + API)   | `3333`                        |
-| Worker port               | `7070` (`ATRIUM_WORKER_PORT`) |
+| Variable                  | Default                                                                                                                                                                                                                                 |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ATRIUM_WORKER_SECRET`    | `dev-secret-change-me`                                                                                                                                                                                                                  |
+| `ATRIUM_WORKER_DIAL_BASE` | `ws://127.0.0.1:7070`                                                                                                                                                                                                                   |
+| `PORT` (demo web + API)   | `3333`                                                                                                                                                                                                                                  |
+| Worker port               | **`pnpm dev`** picks a **free port** if `ATRIUM_WORKER_PORT` is unset, and sets `ATRIUM_WORKER_DIAL_BASE` to match. Override with `ATRIUM_WORKER_PORT=7070` (and optional `ATRIUM_WORKER_DIAL_BASE`). `dev:web` waits on the same port. |
 
 ## Run
 

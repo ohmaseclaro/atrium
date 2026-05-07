@@ -382,13 +382,18 @@ async function handleInternalHttp(
   res: ServerResponse,
   options: WorkerServerOptions,
 ): Promise<boolean> {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  /** Unauthenticated probes (e.g. `wait-on http-get://…` before the API dials in). */
+  if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/healthz")) {
+    return false;
+  }
+
   const token = parseBearer(req.headers.authorization);
   if (!token || token !== options.sharedSecret) {
     res.writeHead(401, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "unauthorized" }));
     return true;
   }
-  const url = new URL(req.url ?? "/", "http://localhost");
   const mNav = /^\/internal\/session\/([^/]+)\/navigate$/.exec(url.pathname);
   const mCook = /^\/internal\/session\/([^/]+)\/cookies$/.exec(url.pathname);
   const mStore = /^\/internal\/session\/([^/]+)\/storage-state$/.exec(url.pathname);
@@ -671,7 +676,8 @@ export async function startWorkerServer(options: WorkerServerOptions): Promise<{
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(options.port, () => resolve());
+    /** `0.0.0.0` ensures IPv4 (e.g. `127.0.0.1` from wait-on / dial clients) works when the host would otherwise bind IPv6-only (`::`). */
+    server.listen(options.port, "0.0.0.0", () => resolve());
   });
 
   const addr = server.address();

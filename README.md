@@ -108,12 +108,12 @@ For a smaller host without a bundled UI, see [`examples/express-host/README.md`]
 
 ## Defaults (local development)
 
-| Variable                  | Typical value                 |
-| ------------------------- | ----------------------------- |
-| `ATRIUM_WORKER_SECRET`    | `dev-secret-change-me`        |
-| `ATRIUM_WORKER_DIAL_BASE` | `ws://127.0.0.1:7070`         |
-| Demo web port             | `3333` (`PORT`)               |
-| Worker port               | `7070` (`ATRIUM_WORKER_PORT`) |
+| Variable                  | Typical value                                                                                                                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ATRIUM_WORKER_SECRET`    | `dev-secret-change-me`                                                                                                                                                                               |
+| `ATRIUM_WORKER_DIAL_BASE` | `ws://127.0.0.1:7070`                                                                                                                                                                                |
+| Demo web port             | `3333` (`PORT`)                                                                                                                                                                                      |
+| Worker port               | `7070` when run alone (`ATRIUM_WORKER_PORT`); **`pnpm demo`** picks a **free port** if unset and sets `ATRIUM_WORKER_DIAL_BASE` to match (see [`packages/demo/README.md`](packages/demo/README.md)). |
 
 ### Worker “stealth” defaults (library-based)
 
