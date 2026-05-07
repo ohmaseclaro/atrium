@@ -59,6 +59,47 @@ pnpm install --frozen-lockfile
 echo "🔨 pnpm build (workspace)..."
 pnpm build
 
+# --- Playwright worker (Docker) — demo POST /atrium/sessions bootstraps via HTTP to :7070 ---
+WORKER_COMPOSE="$ATRIUM_ROOT/deploy/docker-compose.worker.yml"
+
+run_docker_compose() {
+  if docker info >/dev/null 2>&1; then
+    docker compose "$@"
+  elif sudo -n docker info >/dev/null 2>&1; then
+    sudo -n docker compose "$@"
+  else
+    return 127
+  fi
+}
+
+if [ -f "$WORKER_COMPOSE" ] && command -v docker >/dev/null 2>&1; then
+  if ! docker info >/dev/null 2>&1 && ! sudo -n docker info >/dev/null 2>&1; then
+    echo -e "${YELLOW}⚠ Docker is installed but not usable (try: sudo usermod -aG docker \"$USER\" then re-login). Skipping worker container.${NC}"
+  elif [ ! -f "$ATRIUM_ROOT/deploy/atrium-demo.env" ]; then
+    echo -e "${YELLOW}⚠ deploy/atrium-demo.env missing — cannot start worker container (see deploy/atrium-demo.env.example)${NC}"
+  else
+    echo "🐳 Building & starting Atrium worker container (first build may take several minutes)…"
+    if ! run_docker_compose -f "$WORKER_COMPOSE" up -d --build --remove-orphans; then
+      echo -e "${RED}✗ worker docker compose failed — POST /atrium/sessions will fail until the worker runs${NC}"
+      exit 1
+    fi
+    echo -e "${GREEN}✓ worker container is up${NC}"
+    for i in $(seq 1 15); do
+      if curl -sf --max-time 3 "http://127.0.0.1:7070/healthz" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ worker healthz OK (127.0.0.1:7070)${NC}"
+        break
+      fi
+      if [ "$i" -eq 15 ]; then
+        echo -e "${YELLOW}⚠ worker healthz not ready after 30s — check: docker logs atrium-worker${NC}"
+      else
+        sleep 2
+      fi
+    done
+  fi
+elif [ -f "$WORKER_COMPOSE" ]; then
+  echo -e "${YELLOW}⚠ docker not installed — skip worker container (install Docker or run @atriumjs/worker manually)${NC}"
+fi
+
 echo "🔁 Restarting atrium-demo service..."
 if systemctl list-unit-files --type=service 2>/dev/null | grep -q '^atrium-demo\.service'; then
   sudo systemctl restart atrium-demo

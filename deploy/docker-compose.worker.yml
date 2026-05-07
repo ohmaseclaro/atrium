@@ -1,0 +1,21 @@
+# Playwright worker for demo.atriumjs.dev — built from repo root.
+# Used by deploy/update-demo.sh (requires Docker + deploy/atrium-demo.env).
+#
+# From repo root: docker compose -f deploy/docker-compose.worker.yml up -d --build
+
+name: atrium-worker
+
+services:
+  worker:
+    container_name: atrium-worker
+    build:
+      context: ..
+      dockerfile: docker/worker/Dockerfile
+    ports:
+      - "127.0.0.1:7070:7070"
+    env_file:
+      - atrium-demo.env
+    environment:
+      ATRIUM_WORKER_PORT: "7070"
+      NODE_ENV: production
+    restart: unless-stopped

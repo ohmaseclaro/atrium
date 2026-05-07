@@ -7,7 +7,7 @@ This mirrors the **Capitanias** production pattern: GitHub Actions SSH to the sa
 | **atriumjs.dev**      | Static files from `deploy/landing/index.html` (`deploy/nginx/atrium-landing-host.conf` → `root …/deploy/landing`). |
 | **demo.atriumjs.dev** | Node demo (`packages/demo`) on loopback; nginx reverse-proxies (`deploy/nginx/atrium-demo-host.conf`).             |
 
-There is **no Docker** requirement for the landing page or the demo Node process. The **Playwright worker** must still be reachable at `ATRIUM_WORKER_DIAL_BASE` (default `ws://127.0.0.1:7070`) — run it with Docker (`docker/worker/Dockerfile`) or directly.
+There is **no Docker** requirement for the landing page or the demo Node process. The **Playwright worker** for `demo.atriumjs.dev` is started automatically by **`deploy/update-demo.sh`** when Docker is available: it runs **`deploy/docker-compose.worker.yml`**, which reads secrets from **`deploy/atrium-demo.env`** (same `ATRIUM_WORKER_SECRET` / `ATRIUM_WORKER_DIAL_BASE` as the demo). Without Docker, run `@atriumjs/worker` yourself so `ATRIUM_WORKER_DIAL_BASE` is reachable (default `ws://127.0.0.1:7070`).
 
 `./deploy/update-demo.sh` refreshes **both** nginx vhosts when their templates change, then runs a single `nginx -t` + `reload`.
 
@@ -48,9 +48,11 @@ There is **no Docker** requirement for the landing page or the demo Node process
    sudo systemctl enable --now atrium-demo
    ```
 
-6. **Worker** — run `@atriumjs/worker` on the host (Docker or systemd) so the dial URL in `atrium-demo.env` works.
+6. **Docker** (recommended for the worker) — install Docker Engine and add the **`deploy`** user to the **`docker`** group so **`deploy/update-demo.sh`** can run `docker compose` without a password (`sudo usermod -aG docker deploy`). The first worker image build can take several minutes (Playwright base image).
 
-7. **TLS on the origin (required for Cloudflare Full)** — before the first `nginx -t` with the current templates, obtain a certificate whose SANs include all three hostnames (one cert is enough):
+7. **Worker** — on each deploy, **`./deploy/update-demo.sh`** builds and starts the **`atrium-worker`** container from **`deploy/docker-compose.worker.yml`** (loopback **7070**). Ensure **`deploy/atrium-demo.env`** exists with **`ATRIUM_WORKER_SECRET`** matching the container. If you cannot use Docker, run **`ATRIUM_WORKER_SECRET=… npx atrium-worker`** (or `pnpm --filter @atriumjs/worker start`) under systemd instead, and keep **`ATRIUM_WORKER_DIAL_BASE`** pointed at that process.
+
+8. **TLS on the origin (required for Cloudflare Full)** — before the first `nginx -t` with the current templates, obtain a certificate whose SANs include all three hostnames (one cert is enough):
 
    ```bash
    sudo mkdir -p /var/www/certbot
@@ -59,15 +61,15 @@ There is **no Docker** requirement for the landing page or the demo Node process
 
    Paths in the repo vhosts expect **`/etc/letsencrypt/live/atriumjs.dev/{fullchain.pem,privkey.pem}`** and the standard **`options-ssl-nginx.conf`** / **`ssl-dhparams.pem`** from certbot. HTTP **:80** keeps **`/.well-known/acme-challenge/`** on `root /var/www/certbot` for renewals; other requests redirect to HTTPS.
 
-8. **Passwordless sudo** for `deploy` — `deploy/update-demo.sh` runs as `deploy` and uses `sudo` for `systemctl restart atrium-demo`, copying nginx vhosts into `/etc/nginx/sites-available/`, `nginx -t`, and `systemctl reload nginx`. Add an `/etc/sudoers.d/` drop-in that matches your paths (`command -v nginx systemctl` on the server).
+9. **Passwordless sudo** for `deploy` — `deploy/update-demo.sh` runs as `deploy` and uses `sudo` for `systemctl restart atrium-demo`, copying nginx vhosts into `/etc/nginx/sites-available/`, `nginx -t`, and `systemctl reload nginx`. Add an `/etc/sudoers.d/` drop-in that matches your paths (`command -v nginx systemctl` on the server).
 
-9. **First deploy** — after step 8:
+10. **First deploy** — after step 9:
 
-   ```bash
-   cd /home/atrium && ./deploy/update-demo.sh
-   ```
+```bash
+cd /home/atrium && ./deploy/update-demo.sh
+```
 
-   If nginx is not installed: `apt install nginx`.
+If nginx is not installed: `apt install nginx`.
 
 ## Nginx files in the repo
 
@@ -114,6 +116,9 @@ cd /home/atrium && ./deploy/update-demo.sh
 # Demo API (replace 7341 if you changed PORT)
 curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:7341/atrium/healthz
 curl -sS -o /dev/null -w "%{http_code}\n" https://demo.atriumjs.dev/atrium/healthz
+
+# Worker internal HTTP (must match ATRIUM_WORKER_DIAL_BASE port, default 7070)
+curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:7070/healthz
 
 # Static landing (via nginx on the box; use -k only if the cert name does not match 127.0.0.1)
 curl -sS -o /dev/null -w "%{http_code}\n" -H "Host: atriumjs.dev" http://127.0.0.1/
