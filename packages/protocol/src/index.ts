@@ -59,6 +59,19 @@ export const serverMessageSchema = z.discriminatedUnion("t", [
       }),
     ),
   }),
+  /**
+   * Remote page invoked `navigator.credentials.get/create` with a `publicKey` (WebAuthn / passkey).
+   * Viewer should ask the user whether to continue (let Chromium show its native passkey UI,
+   * including cross-device QR) or skip (the call rejects with `NotAllowedError` so the site
+   * can fall back to password). Always reply with `webauthn_decision` carrying the same `id`.
+   */
+  z.object({
+    t: z.literal("webauthn_required"),
+    id: z.string(),
+    ceremony: z.enum(["get", "create"]),
+    rpId: z.string().optional(),
+    origin: z.string().optional(),
+  }),
   z.object({
     t: z.literal("error"),
     code: z.string(),
@@ -92,6 +105,11 @@ export const clientMessageSchema = z.union([
   z.object({ t: z.literal("ping") }),
   z.object({ t: z.literal("tab_activate"), tabId: z.string() }),
   z.object({ t: z.literal("tab_close"), tabId: z.string() }),
+  z.object({
+    t: z.literal("webauthn_decision"),
+    id: z.string(),
+    decision: z.enum(["proceed", "dismiss"]),
+  }),
 ]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 

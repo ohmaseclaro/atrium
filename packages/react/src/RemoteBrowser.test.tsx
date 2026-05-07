@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RemoteBrowser } from "./index.js";
 
@@ -7,11 +7,16 @@ type Listener = (ev: Event) => void;
 
 class FakeWebSocket {
   static lastUrl = "";
+  static last: FakeWebSocket | null = null;
+  static OPEN = 1;
   binaryType: BinaryType = "arraybuffer";
+  readyState = 1;
+  readonly sent: string[] = [];
   private readonly listeners = new Map<string, Set<Listener>>();
 
   constructor(public url: string) {
     FakeWebSocket.lastUrl = url;
+    FakeWebSocket.last = this;
     queueMicrotask(() => {
       this.dispatch("open", new Event("open"));
       this.dispatch(
@@ -43,8 +48,12 @@ class FakeWebSocket {
     }
   }
 
-  send(): void {
-    /* no-op for this smoke test */
+  emitMessage(payload: unknown): void {
+    this.dispatch("message", new MessageEvent("message", { data: JSON.stringify(payload) }));
+  }
+
+  send(data: string): void {
+    this.sent.push(data);
   }
 
   close(): void {
@@ -114,5 +123,77 @@ describe("RemoteBrowser", () => {
     });
 
     expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
+  });
+
+  it("opens passkey modal and sends decision back over WebSocket", async () => {
+    render(
+      <RemoteBrowser
+        sessionId="sid"
+        viewerToken="tok"
+        wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeWebSocket.last).not.toBeNull();
+    });
+
+    act(() => {
+      FakeWebSocket.last!.emitMessage({
+        t: "webauthn_required",
+        id: "req-1",
+        ceremony: "get",
+        rpId: "google.com",
+        origin: "https://accounts.google.com",
+      });
+    });
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByText(/Passkey requested by google\.com/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Skip/ }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    const sent = FakeWebSocket.last!.sent.map((s) => JSON.parse(s));
+    expect(sent).toContainEqual({ t: "webauthn_decision", id: "req-1", decision: "dismiss" });
+  });
+
+  it("auto-proceeds and skips the modal when webauthnPrompt={false}", async () => {
+    render(
+      <RemoteBrowser
+        sessionId="sid"
+        viewerToken="tok"
+        wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
+        webauthnPrompt={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeWebSocket.last).not.toBeNull();
+    });
+
+    act(() => {
+      FakeWebSocket.last!.emitMessage({
+        t: "webauthn_required",
+        id: "auto-1",
+        ceremony: "get",
+        rpId: "x.com",
+      });
+    });
+
+    await waitFor(() => {
+      const sent = FakeWebSocket.last!.sent.map((s) => JSON.parse(s));
+      expect(sent).toContainEqual({
+        t: "webauthn_decision",
+        id: "auto-1",
+        decision: "proceed",
+      });
+    });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

@@ -52,6 +52,31 @@ describe("clientMessageSchema", () => {
   it("parses ping", () => {
     expect(clientMessageSchema.parse({ t: "ping" }).t).toBe("ping");
   });
+
+  it("parses webauthn_decision", () => {
+    expect(
+      clientMessageSchema.parse({ t: "webauthn_decision", id: "x", decision: "proceed" }).t,
+    ).toBe("webauthn_decision");
+  });
+
+  it("rejects unknown webauthn_decision values", () => {
+    expect(() =>
+      clientMessageSchema.parse({ t: "webauthn_decision", id: "x", decision: "later" }),
+    ).toThrow();
+  });
+});
+
+describe("serverMessageSchema (webauthn)", () => {
+  it("parses webauthn_required", () => {
+    const msg = serverMessageSchema.parse({
+      t: "webauthn_required",
+      id: "req-1",
+      ceremony: "get",
+      rpId: "google.com",
+      origin: "https://accounts.google.com",
+    });
+    expect(msg.t).toBe("webauthn_required");
+  });
 });
 
 describe("parseClientMessage", () => {

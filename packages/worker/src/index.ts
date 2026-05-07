@@ -72,6 +72,8 @@ type Sink = { ws: WebSocket | null };
 
 type ScreencastFramePayload = { data: string; sessionId: number };
 
+type WebAuthnDecision = "proceed" | "dismiss";
+
 type LiveSession = {
   sessionId: string;
   sink: Sink;
@@ -90,6 +92,7 @@ type LiveSession = {
   screencastFrameListener?: (payload: ScreencastFramePayload) => Promise<void>;
   /** Persisted across context rebuilds (e.g. `replaceLiveSessionStorage`). */
   clientCertificates?: ClientCertificateRuntime[];
+  pendingWebAuthn: Map<string, (d: WebAuthnDecision) => void>;
 };
 
 const sessions = new Map<string, LiveSession>();
@@ -421,6 +424,89 @@ function wireContextNewTabListener(live: LiveSession): void {
   });
 }
 
+/**
+ * Init script injected into every page of a context: wraps `navigator.credentials.{get,create}`.
+ * When called with a `publicKey` (WebAuthn), the wrapper asks the worker (via the
+ * `__atriumWebAuthnRequest` binding) for the user's decision before invoking the original API.
+ *
+ * - `proceed`: call the original API; Chromium's native passkey UI (incl. cross-device QR) shows.
+ * - `dismiss`: throw `NotAllowedError` so the site falls back to password / other factor.
+ */
+const WEBAUTHN_INIT_SCRIPT = `
+(() => {
+  if (!navigator || !navigator.credentials) return;
+  const c = navigator.credentials;
+  const origGet = typeof c.get === "function" ? c.get.bind(c) : null;
+  const origCreate = typeof c.create === "function" ? c.create.bind(c) : null;
+  async function gate(ceremony, options) {
+    try {
+      const pk = options && options.publicKey;
+      const rpId = ceremony === "get" ? (pk && pk.rpId) : (pk && pk.rp && pk.rp.id);
+      const fn = window.__atriumWebAuthnRequest;
+      if (typeof fn !== "function") return "proceed";
+      const decision = await fn({
+        ceremony,
+        rpId: rpId || null,
+        origin: location.origin,
+      });
+      return decision === "dismiss" ? "dismiss" : "proceed";
+    } catch (_e) {
+      return "proceed";
+    }
+  }
+  if (origGet) {
+    c.get = async function (options) {
+      if (!options || !options.publicKey) return origGet(options);
+      const decision = await gate("get", options);
+      if (decision === "dismiss") {
+        throw new DOMException("Cancelled by user", "NotAllowedError");
+      }
+      return origGet(options);
+    };
+  }
+  if (origCreate) {
+    c.create = async function (options) {
+      if (!options || !options.publicKey) return origCreate(options);
+      const decision = await gate("create", options);
+      if (decision === "dismiss") {
+        throw new DOMException("Cancelled by user", "NotAllowedError");
+      }
+      return origCreate(options);
+    };
+  }
+})();
+`;
+
+async function handleWebAuthnGate(live: LiveSession, payload: unknown): Promise<WebAuthnDecision> {
+  const p = (payload ?? {}) as Record<string, unknown>;
+  const ceremony = p.ceremony === "create" ? "create" : "get";
+  const rpId = typeof p.rpId === "string" && p.rpId ? p.rpId : undefined;
+  const origin = typeof p.origin === "string" && p.origin ? p.origin : undefined;
+  const id = randomUUID();
+  sendJson(live.sink, { t: "webauthn_required", id, ceremony, rpId, origin });
+  return new Promise<WebAuthnDecision>((resolve) => {
+    /** Fail-open after 60s so a stalled viewer doesn't deadlock the page forever. */
+    const timer = setTimeout(() => {
+      live.pendingWebAuthn.delete(id);
+      resolve("proceed");
+    }, 60_000);
+    live.pendingWebAuthn.set(id, (d) => {
+      clearTimeout(timer);
+      live.pendingWebAuthn.delete(id);
+      resolve(d);
+    });
+  });
+}
+
+async function wireWebAuthnGate(live: LiveSession): Promise<void> {
+  await live.context
+    .exposeBinding("__atriumWebAuthnRequest", async (_source, payload: unknown) => {
+      return handleWebAuthnGate(live, payload);
+    })
+    .catch(() => undefined);
+  await live.context.addInitScript({ content: WEBAUTHN_INIT_SCRIPT });
+}
+
 function registerFirstTab(live: LiveSession, page: Page, tabId: string): void {
   live.tabIds.set(tabId, page);
   live.pageToTabId.set(page, tabId);
@@ -659,6 +745,9 @@ async function destroyLiveSession(sessionId: string): Promise<void> {
   pendingBootstraps.delete(sessionId);
   pendingControl.delete(sessionId);
   if (live.tabBroadcastTimer) clearTimeout(live.tabBroadcastTimer);
+  /** Resolve any pending passkey gates so paused pages don't hang the close. */
+  for (const r of live.pendingWebAuthn.values()) r("dismiss");
+  live.pendingWebAuthn.clear();
   try {
     await live.context.close();
   } catch {
@@ -710,6 +799,7 @@ async function replaceLiveSessionStorage(
   live.frameSeq = 0;
   live.screencast = { quality: 70, everyNthFrame: 1 };
   wireContextNewTabListener(live);
+  await wireWebAuthnGate(live);
 
   await startScreencastPipeline(live);
   void broadcastTabsState(live);
@@ -876,10 +966,12 @@ async function attachSessionPipeline(
       screencast,
       frameSeq: 0,
       clientCertificates: decodedCerts,
+      pendingWebAuthn: new Map(),
     };
     sessions.set(sessionId, live);
     registerFirstTab(live, page, firstTabId);
     wireContextNewTabListener(live);
+    await wireWebAuthnGate(live);
 
     await startScreencastPipeline(live);
 
@@ -910,6 +1002,11 @@ async function attachSessionPipeline(
           msg.t === "forward"
         ) {
           await handleTabClientMessage(liveNow, msg);
+          return;
+        }
+        if (msg.t === "webauthn_decision") {
+          const r = liveNow.pendingWebAuthn.get(msg.id);
+          if (r) r(msg.decision);
           return;
         }
         await dispatchClientInput(liveNow, msg);

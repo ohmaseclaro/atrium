@@ -46,6 +46,13 @@ export type RemoteBrowserTab = {
   active: boolean;
 };
 
+export type WebAuthnRequest = {
+  id: string;
+  ceremony: "get" | "create";
+  rpId?: string;
+  origin?: string;
+};
+
 export type RemoteBrowserProps = {
   sessionId: string;
   viewerToken: string;
@@ -62,6 +69,14 @@ export type RemoteBrowserProps = {
    * Default: shown when chrome is `none`/unset; hidden when any chrome region is enabled (override with `true`).
    */
   showSessionStatus?: boolean;
+  /**
+   * When the remote page invokes `navigator.credentials.{get,create}` with a `publicKey`
+   * (passkey / WebAuthn), the viewer prompts the user. `false` disables the built-in modal
+   * (the call is auto-allowed so Chromium's native UI shows). Default `true`.
+   */
+  webauthnPrompt?: boolean;
+  /** Notified whenever a passkey ceremony is requested (for telemetry / custom UX). */
+  onWebAuthnRequest?: (req: WebAuthnRequest) => void;
   onControlChange?: (holder: ControlHolder) => void;
   onTerminated?: (reason: string) => void;
   style?: CSSProperties;
@@ -76,6 +91,7 @@ function sendWs(ws: WebSocket, obj: unknown): void {
  */
 export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
   const interactive = props.interactive ?? false;
+  const webauthnPrompt = props.webauthnPrompt ?? true;
   const resolvedChrome = useMemo(() => resolveRemoteBrowserChrome(props.chrome), [props.chrome]);
   const showSessionStatus =
     props.showSessionStatus ??
@@ -85,17 +101,20 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
   const wsRef = useRef<WebSocket | null>(null);
   const onControlChangeRef = useRef(props.onControlChange);
   const onTerminatedRef = useRef(props.onTerminated);
+  const onWebAuthnRequestRef = useRef(props.onWebAuthnRequest);
   const [status, setStatus] = useState<"idle" | "connecting" | "live" | "ended">("idle");
   const [holder, setHolder] = useState<ControlHolder>("agent");
   const [viewport, setViewport] = useState({ w: 1280, h: 800 });
   const [tabs, setTabs] = useState<RemoteBrowserTab[]>([]);
   const [activeUrl, setActiveUrl] = useState("");
   const [activeTitle, setActiveTitle] = useState("");
+  const [webauthnRequest, setWebauthnRequest] = useState<WebAuthnRequest | null>(null);
 
   useEffect(() => {
     onControlChangeRef.current = props.onControlChange;
     onTerminatedRef.current = props.onTerminated;
-  }, [props.onControlChange, props.onTerminated]);
+    onWebAuthnRequestRef.current = props.onWebAuthnRequest;
+  }, [props.onControlChange, props.onTerminated, props.onWebAuthnRequest]);
 
   const connect = useCallback(() => {
     const url = new URL(props.wsUrl);
@@ -124,6 +143,20 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
           }
           if (msg.t === "tabs") {
             setTabs(msg.tabs);
+          }
+          if (msg.t === "webauthn_required") {
+            const req: WebAuthnRequest = {
+              id: msg.id,
+              ceremony: msg.ceremony,
+              rpId: msg.rpId,
+              origin: msg.origin,
+            };
+            onWebAuthnRequestRef.current?.(req);
+            if (webauthnPrompt) {
+              setWebauthnRequest(req);
+            } else {
+              sendWs(ws, { t: "webauthn_decision", id: msg.id, decision: "proceed" });
+            }
           }
           if (msg.t === "navigate") {
             setActiveUrl(msg.url);
@@ -161,7 +194,7 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
     ws.addEventListener("close", () => {
       setStatus((s) => (s === "ended" ? s : "ended"));
     });
-  }, [props.viewerToken, props.wsUrl]);
+  }, [props.viewerToken, props.wsUrl, webauthnPrompt]);
 
   useEffect(() => {
     connect();
@@ -534,6 +567,27 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
       </div>
     ) : null;
 
+  const decideWebAuthn = (decision: "proceed" | "dismiss"): void => {
+    const ws = wsRef.current;
+    const req = webauthnRequest;
+    if (!req) return;
+    if (ws) sendWs(ws, { t: "webauthn_decision", id: req.id, decision });
+    setWebauthnRequest(null);
+  };
+
+  const webauthnRpLabel = (() => {
+    if (!webauthnRequest) return "";
+    if (webauthnRequest.rpId) return webauthnRequest.rpId;
+    if (webauthnRequest.origin) {
+      try {
+        return new URL(webauthnRequest.origin).hostname;
+      } catch {
+        return webauthnRequest.origin;
+      }
+    }
+    return "this site";
+  })();
+
   return (
     <div style={{ width: "100%", ...props.style }}>
       {showSessionStatus ? (
@@ -564,6 +618,81 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
           {streamStage}
         </div>
       )}
+      {webauthnRequest ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="atrium-webauthn-title"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            fontFamily: 'system-ui, "Segoe UI", Roboto, sans-serif',
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: "20px 22px",
+              maxWidth: 460,
+              width: "calc(100% - 32px)",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
+              color: "#1f2937",
+            }}
+          >
+            <h2 id="atrium-webauthn-title" style={{ margin: "0 0 8px", fontSize: 18 }}>
+              Passkey requested by {webauthnRpLabel}
+            </h2>
+            <p style={{ margin: "0 0 12px", fontSize: 13, lineHeight: 1.5, color: "#374151" }}>
+              The remote browser is asking for a passkey (
+              {webauthnRequest.ceremony === "create" ? "register" : "sign in"}
+              ). You can continue here — Chrome will offer to use a passkey on another device (QR
+              code on your phone) — or skip and use a different sign-in option (e.g. password).
+            </p>
+            <p style={{ margin: "0 0 16px", fontSize: 12, lineHeight: 1.5, color: "#6b7280" }}>
+              Your passkey, fingerprint, or hardware key never leaves your device.
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => decideWebAuthn("dismiss")}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  border: "1px solid #d1d5db",
+                  background: "#fff",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  color: "#374151",
+                }}
+              >
+                Skip (use another sign-in)
+              </button>
+              <button
+                type="button"
+                onClick={() => decideWebAuthn("proceed")}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  border: "1px solid #1d4ed8",
+                  background: "#2563eb",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  color: "#fff",
+                  fontWeight: 600,
+                }}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

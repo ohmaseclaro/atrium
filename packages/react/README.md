@@ -40,6 +40,8 @@ import { RemoteBrowser } from "@atrium/react";
 | **`showSessionStatus`** | `boolean`                    | Session / control status line. Default: **`true`** if no chrome; **`false`** if any chrome region is on (set explicitly to show both). |
 | **`onControlChange`**   | `(holder) => void`           | `agent` \| `human` \| `idle`.                                                                                                          |
 | **`onTerminated`**      | `(reason) => void`           | Session ended.                                                                                                                         |
+| **`webauthnPrompt`**    | `boolean`                    | Default `true`. When `false`, auto-proceed every passkey request (Chromium's native UI handles the user).                              |
+| **`onWebAuthnRequest`** | `(req) => void`              | Telemetry hook for passkey requests (`{ id, ceremony, rpId, origin }`).                                                                |
 | **`style`**             | `CSSProperties`              | Root wrapper.                                                                                                                          |
 
 ### Optional chrome (`chrome` prop)
@@ -67,6 +69,15 @@ import { resolveRemoteBrowserChrome } from "@atrium/react";
 
 const flags = resolveRemoteBrowserChrome("minimal");
 ```
+
+### Passkey / WebAuthn modal
+
+When the remote page calls `navigator.credentials.{get,create}` with a `publicKey`, the worker sends a `webauthn_required` event and `<RemoteBrowser />` opens a built-in modal:
+
+- **Continue** — Chromium's native passkey UI takes over (including cross-device QR for "use a passkey on another device").
+- **Skip** — the page-side promise rejects with `NotAllowedError` so the site can offer password / OTP fallback.
+
+Disable the built-in modal with `webauthnPrompt={false}` (auto-proceeds), or wire your own UX by combining `webauthnPrompt={false}` with `onWebAuthnRequest={(req) => …}`.
 
 ### Pointer coordinates
 
