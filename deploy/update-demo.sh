@@ -22,6 +22,16 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "ROOT=$ATRIUM_ROOT"
 echo ""
 
+# Non-login SSH (e.g. GitHub Actions → appleboy/ssh-action) does not source
+# ~/.bashrc — load nvm so Node 20 + corepack pnpm are on PATH when installed
+# under $HOME/.nvm (typical for the `deploy` user on our VPS).
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  # shellcheck disable=SC1090
+  . "$NVM_DIR/nvm.sh"
+  nvm use default >/dev/null 2>&1 || true
+fi
+
 # Optional: light Docker cleanup when sharing a box with other apps (same
 # invariants as Capitanias: dangling images only, no volume prune).
 if command -v docker >/dev/null 2>&1; then
