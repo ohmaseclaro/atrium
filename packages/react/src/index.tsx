@@ -84,6 +84,13 @@ export type RemoteBrowserProps = {
   onControlChange?: (holder: ControlHolder) => void;
   onTerminated?: (reason: string) => void;
   style?: CSSProperties;
+  /**
+   * When true, stretches to fill the parent (use a parent with `height: 100%` inside a fullscreen element).
+   * Renders a top bar with **Exit full screen** that calls `document.exitFullscreen()` when active, then `onExitFullScreen`.
+   * For reliable fullscreen, call `element.requestFullscreen()` from the same user gesture that shows this tree (before awaiting network).
+   */
+  fullScreen?: boolean;
+  onExitFullScreen?: () => void;
 };
 
 function sendWs(ws: WebSocket, obj: unknown): void {
@@ -96,6 +103,7 @@ function sendWs(ws: WebSocket, obj: unknown): void {
 export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
   const interactive = props.interactive ?? false;
   const webauthnNotice = props.webauthnNotice ?? true;
+  const fullScreen = props.fullScreen ?? false;
   const resolvedChrome = useMemo(() => resolveRemoteBrowserChrome(props.chrome), [props.chrome]);
   const showSessionStatus =
     props.showSessionStatus ??
@@ -120,6 +128,13 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
     onTerminatedRef.current = props.onTerminated;
     onWebAuthnRequestRef.current = props.onWebAuthnRequest;
   }, [props.onControlChange, props.onTerminated, props.onWebAuthnRequest]);
+
+  const exitFullScreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen?.().catch(() => undefined);
+    }
+    props.onExitFullScreen?.();
+  }, [props.onExitFullScreen]);
 
   const connect = useCallback(() => {
     const url = new URL(props.wsUrl);
@@ -382,16 +397,24 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
 
   const chromeShell = anyChrome
     ? {
-        borderRadius: 10,
+        borderRadius: fullScreen ? 0 : 10,
         overflow: "hidden" as const,
-        border: "1px solid #c4c7cc",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06)",
-        maxWidth: 1280,
+        border: fullScreen ? "none" : "1px solid #c4c7cc",
+        boxShadow: fullScreen ? "none" : "0 1px 3px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06)",
+        maxWidth: fullScreen ? ("none" as const) : 1280,
         width: "100%",
         marginLeft: "auto",
         marginRight: "auto",
         background: "#dee1e6",
         fontFamily: 'system-ui, "Segoe UI", Roboto, sans-serif',
+        ...(fullScreen
+          ? {
+              flex: 1,
+              minHeight: 0,
+              display: "flex" as const,
+              flexDirection: "column" as const,
+            }
+          : {}),
       }
     : undefined;
 
@@ -404,6 +427,7 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
         justifyContent: "center",
         alignItems: "center",
         background: "#0b0d12",
+        ...(fullScreen ? { flex: 1, minHeight: 0 } : {}),
       }}
     >
       <div
@@ -413,6 +437,14 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
           maxWidth: "100%",
           aspectRatio: `${viewport.w} / ${viewport.h}`,
           margin: "0 auto",
+          ...(fullScreen
+            ? {
+                maxHeight: "100%",
+                height: "auto",
+                alignSelf: "center",
+                flexShrink: 0,
+              }
+            : {}),
         }}
       >
         <canvas
@@ -611,35 +643,119 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
     return "this site";
   })();
 
+  const rootStyle: CSSProperties = {
+    width: "100%",
+    ...(fullScreen
+      ? {
+          height: "100%",
+          minHeight: "100%",
+          display: "flex",
+          flexDirection: "column",
+          background: "#0b0d12",
+        }
+      : {}),
+    ...props.style,
+  };
+
+  const fullScreenBar = fullScreen ? (
+    <div
+      style={{
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "flex-end",
+        gap: 12,
+        padding: "8px 12px",
+        borderBottom: "1px solid rgba(255,255,255,0.08)",
+        background: "#12151c",
+        fontFamily: 'system-ui, "Segoe UI", Roboto, sans-serif',
+      }}
+    >
+      <button
+        type="button"
+        onClick={exitFullScreen}
+        style={{
+          border: "1px solid rgba(255,255,255,0.2)",
+          background: "rgba(255,255,255,0.06)",
+          color: "#e5e7eb",
+          borderRadius: 8,
+          padding: "6px 12px",
+          fontSize: 13,
+          cursor: "pointer",
+        }}
+      >
+        Exit full screen
+      </button>
+    </div>
+  ) : null;
+
+  const statusLine = showSessionStatus ? (
+    <div
+      style={{
+        fontFamily: "system-ui, sans-serif",
+        fontSize: 12,
+        marginBottom: fullScreen ? 6 : 8,
+        color: fullScreen ? "#9ca3af" : "#374151",
+        flexShrink: 0,
+      }}
+    >
+      Session {props.sessionId} — control: {holder} — {status}
+      {interactive && holder === "human" ? (
+        <span style={{ marginLeft: 8, color: fullScreen ? "#34d399" : "#059669" }}>
+          (click canvas to focus, then type)
+        </span>
+      ) : null}
+    </div>
+  ) : null;
+
+  const chromeBlock = (
+    <div style={chromeShell}>
+      {tabStrip}
+      {toolbarRow}
+      {streamStage}
+    </div>
+  );
+
+  const noChromeBlock = (
+    <div
+      style={{
+        width: "100%",
+        maxWidth: fullScreen ? ("none" as const) : 1280,
+        marginLeft: "auto",
+        marginRight: "auto",
+        ...(fullScreen
+          ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" as const }
+          : {}),
+      }}
+    >
+      {streamStage}
+    </div>
+  );
+
+  const main = (
+    <>
+      {statusLine}
+      {anyChrome ? chromeBlock : noChromeBlock}
+    </>
+  );
+
   return (
-    <div style={{ width: "100%", ...props.style }}>
-      {showSessionStatus ? (
+    <div style={rootStyle}>
+      {fullScreenBar}
+      {fullScreen ? (
         <div
           style={{
-            fontFamily: "system-ui, sans-serif",
-            fontSize: 12,
-            marginBottom: 8,
-            color: "#374151",
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
           }}
         >
-          Session {props.sessionId} — control: {holder} — {status}
-          {interactive && holder === "human" ? (
-            <span style={{ marginLeft: 8, color: "#059669" }}>
-              (click canvas to focus, then type)
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-      {anyChrome ? (
-        <div style={chromeShell}>
-          {tabStrip}
-          {toolbarRow}
-          {streamStage}
+          {main}
         </div>
       ) : (
-        <div style={{ width: "100%", maxWidth: 1280, marginLeft: "auto", marginRight: "auto" }}>
-          {streamStage}
-        </div>
+        main
       )}
       {webauthnToast ? (
         <div

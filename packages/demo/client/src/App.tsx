@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
-import { sessionStatusSchema } from "@atrium/protocol";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { RemoteBrowser } from "@atrium/react";
+
+const DEFAULT_TWEET = "Hello from Atrium X demo — automated post after login.";
 
 type SessionPayload = {
   sessionId: string;
@@ -9,419 +11,416 @@ type SessionPayload = {
   expiresAt: number;
 };
 
-type HealthJson = { ok?: boolean };
-type ReadyJson = { ok?: boolean; workerDialBase?: string };
-
-async function readJson<T>(res: Response): Promise<T> {
-  const text = await res.text();
-  if (!text) return {} as T;
-  return JSON.parse(text) as T;
-}
+type FlowPhase = "tweet" | "starting" | "login" | "posting" | "done";
 
 export function App(): JSX.Element {
-  const [health, setHealth] = useState<HealthJson | null>(null);
-  const [ready, setReady] = useState<ReadyJson | null>(null);
+  const fullscreenRootRef = useRef<HTMLDivElement>(null);
+  const sessionRef = useRef<SessionPayload | null>(null);
+  const flowActiveRef = useRef(false);
+
+  const [flowOpen, setFlowOpen] = useState(false);
+  const [phase, setPhase] = useState<FlowPhase>("tweet");
   const [session, setSession] = useState<SessionPayload | null>(null);
-  const [sessionInfo, setSessionInfo] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [events, setEvents] = useState<string[]>([]);
-  const [xSnapshot, setXSnapshot] = useState<string | null>(null);
-  const [tweetDraft, setTweetDraft] = useState(
-    "Hello from Atrium X demo — automated post after login.",
-  );
-
-  const log = useCallback((line: string) => {
-    setEvents((prev) => [...prev.slice(-40), `${new Date().toISOString().slice(11, 19)} ${line}`]);
-  }, []);
-
-  const refreshProbes = useCallback(async () => {
-    setError(null);
-    try {
-      const [h, r] = await Promise.all([fetch("/atrium/healthz"), fetch("/atrium/readyz")]);
-      setHealth(await readJson<HealthJson>(h));
-      setReady(await readJson<ReadyJson>(r));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "probe_failed");
-    }
-  }, []);
+  const [busyStart, setBusyStart] = useState(false);
+  const [busyPost, setBusyPost] = useState(false);
+  const [tweetDraft, setTweetDraft] = useState(DEFAULT_TWEET);
 
   useEffect(() => {
-    void refreshProbes();
-  }, [refreshProbes]);
+    sessionRef.current = session;
+  }, [session]);
 
-  const createSession = useCallback(async () => {
-    setBusy(true);
-    setError(null);
+  const destroySession = useCallback(async (s: SessionPayload) => {
     try {
-      const res = await fetch("/atrium/sessions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      });
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`HTTP ${res.status}: ${body}`);
-      }
-      const data = (await res.json()) as SessionPayload;
-      setSession(data);
-      setSessionInfo(null);
-      setXSnapshot(null);
-      log(`session_created id=${data.sessionId}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "create_failed");
-    } finally {
-      setBusy(false);
+      await fetch(`/atrium/sessions/${s.sessionId}`, { method: "DELETE" });
+    } catch {
+      /* ignore */
     }
-  }, [log]);
+  }, []);
 
-  const startXLoginFlow = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch("/atrium/sessions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          initialUrl: "https://x.com/i/flow/login",
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`HTTP ${res.status}: ${body}`);
-      }
-      const data = (await res.json()) as SessionPayload;
-      setSession(data);
-      setSessionInfo(null);
-      setXSnapshot(null);
-      log(`x_flow_session id=${data.sessionId}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "x_flow_failed");
-    } finally {
-      setBusy(false);
+  const leaveFlow = useCallback(async () => {
+    flowActiveRef.current = false;
+    const s = sessionRef.current;
+    sessionRef.current = null;
+    if (document.fullscreenElement) {
+      await document.exitFullscreen?.().catch(() => undefined);
     }
-  }, [log]);
-
-  const fetchSession = useCallback(async () => {
-    if (!session) return;
-    setBusy(true);
+    if (s) await destroySession(s);
+    setSession(null);
+    setFlowOpen(false);
+    setPhase("tweet");
     setError(null);
-    try {
-      const res = await fetch(`/atrium/sessions/${session.sessionId}`);
-      const data = await readJson<unknown>(res);
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${JSON.stringify(data)}`);
-      setSessionInfo(data);
-      log(`session_get ok`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "get_failed");
-    } finally {
-      setBusy(false);
-    }
-  }, [session, log]);
+  }, [destroySession]);
 
-  const destroySession = useCallback(async () => {
-    if (!session) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch(`/atrium/sessions/${session.sessionId}`, { method: "DELETE" });
-      if (!res.ok && res.status !== 204) {
-        const body = await res.text();
-        throw new Error(`HTTP ${res.status}: ${body}`);
-      }
-      log(`session_deleted id=${session.sessionId}`);
+  useEffect(() => {
+    const onFsChange = () => {
+      if (document.fullscreenElement != null) return;
+      if (!flowActiveRef.current) return;
+      flowActiveRef.current = false;
+      const s = sessionRef.current;
+      sessionRef.current = null;
+      if (s) void destroySession(s);
       setSession(null);
-      setSessionInfo(null);
-      setXSnapshot(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "delete_failed");
-    } finally {
-      setBusy(false);
-    }
-  }, [session, log]);
-
-  const postControl = useCallback(
-    async (action: "grant" | "release", to?: "human") => {
-      if (!session) return;
-      setBusy(true);
+      setFlowOpen(false);
+      setPhase("tweet");
       setError(null);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, [destroySession]);
+
+  const grantHuman = useCallback(async (s: SessionPayload) => {
+    const res = await fetch(`/atrium/sessions/${s.sessionId}/control`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "grant", to: "human" }),
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`Grant control failed: HTTP ${res.status}: ${t}`);
+    }
+  }, []);
+
+  const releaseAgent = useCallback(async (s: SessionPayload) => {
+    const res = await fetch(`/atrium/sessions/${s.sessionId}/control`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "release" }),
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`Return control failed: HTTP ${res.status}: ${t}`);
+    }
+  }, []);
+
+  const loginAndPost = useCallback(() => {
+    setError(null);
+    flowActiveRef.current = true;
+    flushSync(() => {
+      setFlowOpen(true);
+      setPhase("starting");
+    });
+    const el = fullscreenRootRef.current;
+    if (el) {
+      void el.requestFullscreen?.().catch(() => undefined);
+    }
+
+    void (async () => {
+      setBusyStart(true);
       try {
-        const body =
-          action === "grant" ? { action: "grant", to: to ?? "human" } : { action: "release" };
-        const res = await fetch(`/atrium/sessions/${session.sessionId}/control`, {
+        const res = await fetch("/atrium/sessions", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ initialUrl: "https://x.com/i/flow/login" }),
         });
         if (!res.ok) {
-          const t = await res.text();
-          throw new Error(`HTTP ${res.status}: ${t}`);
+          const body = await res.text();
+          throw new Error(`HTTP ${res.status}: ${body}`);
         }
-        log(`control_${action}`);
+        const data = (await res.json()) as SessionPayload;
+        setSession(data);
+        await grantHuman(data);
+        setPhase("login");
       } catch (e) {
-        setError(e instanceof Error ? e.message : "control_failed");
+        setError(e instanceof Error ? e.message : "start_failed");
+        await leaveFlow();
       } finally {
-        setBusy(false);
+        setBusyStart(false);
       }
-    },
-    [session, log],
-  );
+    })();
+  }, [grantHuman, leaveFlow]);
 
-  const pullSessionSnapshot = useCallback(async () => {
-    if (!session) return;
-    setBusy(true);
+  const finishLoginAndTweet = useCallback(async () => {
+    const s = sessionRef.current;
+    if (!s) return;
+    setBusyPost(true);
     setError(null);
     try {
-      const res = await fetch(`/atrium/sessions/${session.sessionId}/session-snapshot`);
-      const data = await readJson<unknown>(res);
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${JSON.stringify(data)}`);
-      setXSnapshot(JSON.stringify(data, null, 2));
-      log("session_snapshot_ok");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "snapshot_failed");
-    } finally {
-      setBusy(false);
-    }
-  }, [session, log]);
+      const snap = await fetch(`/atrium/sessions/${s.sessionId}/session-snapshot`);
+      const snapText = await snap.text();
+      if (!snap.ok) {
+        throw new Error(`Session snapshot failed: HTTP ${snap.status}: ${snapText.slice(0, 800)}`);
+      }
 
-  const postXTweet = useCallback(async () => {
-    if (!session) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch(`/atrium/sessions/${session.sessionId}/x-demo/compose-tweet`, {
+      setPhase("posting");
+      await releaseAgent(s);
+
+      const compose = await fetch(`/atrium/sessions/${s.sessionId}/x-demo/compose-tweet`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: tweetDraft }),
+        body: JSON.stringify({ text: tweetDraft.trim() || DEFAULT_TWEET }),
       });
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error(`HTTP ${res.status}: ${t}`);
+      if (!compose.ok) {
+        const t = await compose.text();
+        throw new Error(`Compose tweet failed: HTTP ${compose.status}: ${t}`);
       }
-      log("x_compose_ok");
+      setPhase("done");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "compose_failed");
+      setError(e instanceof Error ? e.message : "post_failed");
     } finally {
-      setBusy(false);
+      setBusyPost(false);
     }
-  }, [session, tweetDraft, log]);
+  }, [releaseAgent, tweetDraft]);
+
+  const floatingHint = (() => {
+    if (phase === "starting" || busyStart) {
+      return "Starting a secure remote browser on X…";
+    }
+    if (phase === "login") {
+      return "Sign in on the page below. Passkeys are not supported — use password or code.";
+    }
+    if (phase === "posting") {
+      return "Watch the remote browser — your tweet is being sent.";
+    }
+    if (phase === "done") {
+      return "Your tweet was sent from the remote session.";
+    }
+    return "";
+  })();
 
   return (
     <div
       style={{
-        fontFamily: "system-ui, sans-serif",
-        maxWidth: 960,
-        margin: "0 auto",
+        minHeight: "100vh",
+        margin: 0,
+        fontFamily: 'system-ui, "Segoe UI", Roboto, sans-serif',
+        background: "radial-gradient(120% 80% at 50% 0%, #1e293b 0%, #0f172a 45%, #020617 100%)",
+        color: "#f8fafc",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
         padding: 24,
-        color: "#111827",
+        boxSizing: "border-box",
       }}
     >
-      <header style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 28, margin: "0 0 8px" }}>Atrium demo</h1>
-        <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
-          This app uses <code>@atrium/server</code> (Express + dial relay),{" "}
-          <code>@atrium/react</code> (<code>RemoteBrowser</code>), and the same defaults as the root
-          README. Run <code>pnpm --filter @atrium/demo dev</code> so the worker starts on port 7070
-          before the web server binds.
-        </p>
-      </header>
-
-      <p style={{ fontSize: 13, color: "#4b5563", marginBottom: 12 }}>
-        <strong>@atrium/protocol</strong> in this bundle: session statuses{" "}
-        <code>{sessionStatusSchema.options.join(", ")}</code>
-      </p>
-
-      <section
+      <article
         style={{
-          display: "grid",
-          gap: 12,
-          gridTemplateColumns: "1fr 1fr",
-          marginBottom: 20,
+          width: "100%",
+          maxWidth: 520,
+          borderRadius: 20,
+          padding: 28,
+          boxSizing: "border-box",
+          background: "linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)",
+          backdropFilter: "blur(12px)",
         }}
       >
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
-          <strong>GET /atrium/healthz</strong>
-          <pre style={{ margin: "8px 0 0", fontSize: 12, overflow: "auto" }}>
-            {health ? JSON.stringify(health, null, 2) : "…"}
-          </pre>
-        </div>
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
-          <strong>GET /atrium/readyz</strong>
-          <pre style={{ margin: "8px 0 0", fontSize: 12, overflow: "auto" }}>
-            {ready ? JSON.stringify(ready, null, 2) : "…"}
-          </pre>
-        </div>
-      </section>
-
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-        <button type="button" onClick={() => void refreshProbes()} disabled={busy}>
-          Refresh probes
-        </button>
-        <button type="button" onClick={() => void createSession()} disabled={busy}>
-          POST /atrium/sessions (example.com)
-        </button>
-        <button type="button" onClick={() => void fetchSession()} disabled={busy || !session}>
-          GET session
-        </button>
-        <button type="button" onClick={() => void destroySession()} disabled={busy || !session}>
-          DELETE session
-        </button>
-      </div>
-
-      <section
-        style={{
-          border: "1px solid #fcd34d",
-          background: "#fffbeb",
-          borderRadius: 10,
-          padding: 16,
-          marginBottom: 24,
-        }}
-      >
-        <h2 style={{ fontSize: 18, margin: "0 0 8px" }}>X (Twitter) workflow demo</h2>
-        <p style={{ margin: "0 0 12px", fontSize: 14, color: "#92400e", lineHeight: 1.55 }}>
-          Opens <code>x.com</code> login in the remote browser. Use <strong>Grant control</strong>,
-          click the canvas to focus, then sign in. Pull a <strong>session snapshot</strong> (cookies
-          + Playwright <code>storageState</code>), return control to automation, and run{" "}
-          <strong>Compose tweet</strong>. This can fail if X changes their UI, blocks automation, or
-          shows a challenge. The worker runs <strong>headed</strong> by default; on macOS/Windows
-          you get a real window. On Linux without a display, run the worker under{" "}
-          <code>xvfb-run</code> (see root README / Docker) or set{" "}
-          <code>ATRIUM_WORKER_HEADLESS=1</code> only if you accept headless.
-        </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-          <button type="button" onClick={() => void startXLoginFlow()} disabled={busy}>
-            Start X login flow
-          </button>
-          <button
-            type="button"
-            onClick={() => void postControl("grant", "human")}
-            disabled={busy || !session}
-          >
-            Grant control (human)
-          </button>
-          <button
-            type="button"
-            onClick={() => void postControl("release")}
-            disabled={busy || !session}
-          >
-            Return control (agent)
-          </button>
-          <button
-            type="button"
-            onClick={() => void pullSessionSnapshot()}
-            disabled={busy || !session}
-          >
-            GET session snapshot
-          </button>
-        </div>
-        <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>
-          Tweet text (max 280)
-          <textarea
-            value={tweetDraft}
-            onChange={(e) => setTweetDraft(e.target.value)}
-            rows={3}
+        <header style={{ marginBottom: 20 }}>
+          <p
             style={{
-              display: "block",
-              width: "100%",
-              marginTop: 6,
-              fontFamily: "inherit",
-              fontSize: 14,
-              padding: 8,
-              borderRadius: 6,
-              border: "1px solid #d1d5db",
+              margin: "0 0 6px",
+              fontSize: 11,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              color: "#94a3b8",
+              fontWeight: 600,
             }}
-          />
+          >
+            Atrium demo
+          </p>
+          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em" }}>
+            Post from a remote browser
+          </h1>
+          <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.55, color: "#cbd5e1" }}>
+            One flow: we open X for you in fullscreen, you sign in, then we capture the session and
+            send this tweet while you watch.
+          </p>
+        </header>
+
+        <label style={{ display: "block", fontSize: 13, color: "#94a3b8", marginBottom: 8 }}>
+          Tweet
         </label>
-        <button type="button" onClick={() => void postXTweet()} disabled={busy || !session}>
-          POST x-demo compose tweet
+        <textarea
+          value={tweetDraft}
+          onChange={(e) => setTweetDraft(e.target.value)}
+          maxLength={280}
+          rows={4}
+          disabled={flowOpen}
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            resize: "vertical",
+            minHeight: 100,
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.14)",
+            background: "rgba(2,6,23,0.55)",
+            color: "#f1f5f9",
+            fontSize: 16,
+            lineHeight: 1.45,
+            padding: "14px 16px",
+            outline: "none",
+            fontFamily: "inherit",
+          }}
+        />
+        <p style={{ margin: "8px 0 0", fontSize: 12, color: "#64748b", textAlign: "right" }}>
+          {tweetDraft.length}/280
+        </p>
+
+        {error ? (
+          <p style={{ color: "#fca5a5", fontSize: 14, marginTop: 16 }} role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={loginAndPost}
+          disabled={flowOpen || busyStart || !tweetDraft.trim()}
+          style={{
+            marginTop: 22,
+            width: "100%",
+            border: "none",
+            borderRadius: 999,
+            padding: "14px 22px",
+            fontSize: 16,
+            fontWeight: 600,
+            cursor: flowOpen || busyStart || !tweetDraft.trim() ? "not-allowed" : "pointer",
+            background:
+              flowOpen || busyStart || !tweetDraft.trim()
+                ? "rgba(148,163,184,0.35)"
+                : "linear-gradient(135deg, #38bdf8 0%, #2563eb 100%)",
+            color: "#020617",
+            boxShadow:
+              flowOpen || busyStart || !tweetDraft.trim()
+                ? "none"
+                : "0 10px 28px rgba(37,99,235,0.45)",
+          }}
+        >
+          {busyStart ? "Opening…" : "Login and post"}
         </button>
-        {xSnapshot ? (
-          <details style={{ marginTop: 12 }}>
-            <summary style={{ cursor: "pointer", fontSize: 13 }}>Last snapshot JSON</summary>
-            <pre
+      </article>
+
+      {flowOpen ? (
+        <div
+          ref={fullscreenRootRef}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            display: "flex",
+            flexDirection: "column",
+            background: "#020617",
+          }}
+        >
+          {session ? (
+            <div
               style={{
-                marginTop: 8,
-                maxHeight: 220,
-                overflow: "auto",
-                fontSize: 11,
-                background: "#fff",
-                border: "1px solid #e5e7eb",
-                borderRadius: 6,
-                padding: 8,
+                flex: 1,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
               }}
             >
-              {xSnapshot}
-            </pre>
-          </details>
-        ) : null}
-      </section>
+              <RemoteBrowser
+                sessionId={session.sessionId}
+                viewerToken={session.viewerToken}
+                wsUrl={session.wsUrl}
+                chrome="full"
+                fullScreen
+                showSessionStatus={false}
+                interactive
+                webauthnNotice
+                onExitFullScreen={() => void leaveFlow()}
+                onTerminated={() => void leaveFlow()}
+                style={{ flex: 1, minHeight: 0 }}
+              />
+            </div>
+          ) : (
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexDirection: "column",
+                gap: 16,
+                color: "#94a3b8",
+                fontSize: 15,
+              }}
+            >
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: "50%",
+                  border: "3px solid rgba(148,163,184,0.25)",
+                  borderTopColor: "#38bdf8",
+                  animation: "atrium-spin 0.9s linear infinite",
+                }}
+              />
+              <p style={{ margin: 0 }}>Preparing your remote browser…</p>
+              <style>{`@keyframes atrium-spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+          )}
 
-      {error ? (
-        <p style={{ color: "#b91c1c", marginBottom: 12 }} role="alert">
-          {error}
-        </p>
+          <div
+            style={{
+              position: "fixed",
+              left: "50%",
+              bottom: 28,
+              transform: "translateX(-50%)",
+              zIndex: 1100,
+              width: "min(420px, calc(100vw - 32px))",
+              borderRadius: 16,
+              padding: "16px 18px",
+              boxSizing: "border-box",
+              background: "rgba(15,23,42,0.92)",
+              border: "1px solid rgba(148,163,184,0.25)",
+              boxShadow: "0 16px 48px rgba(0,0,0,0.55)",
+              backdropFilter: "blur(10px)",
+            }}
+          >
+            <p style={{ margin: "0 0 12px", fontSize: 13, lineHeight: 1.5, color: "#e2e8f0" }}>
+              {floatingHint}
+            </p>
+            {phase === "login" ? (
+              <button
+                type="button"
+                onClick={() => void finishLoginAndTweet()}
+                disabled={busyPost || !session}
+                style={{
+                  width: "100%",
+                  border: "none",
+                  borderRadius: 12,
+                  padding: "12px 16px",
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: busyPost || !session ? "not-allowed" : "pointer",
+                  background: busyPost || !session ? "rgba(71,85,105,0.6)" : "#f8fafc",
+                  color: "#0f172a",
+                }}
+              >
+                {busyPost ? "Working…" : "I’m logged in — post my tweet"}
+              </button>
+            ) : null}
+            {phase === "done" ? (
+              <button
+                type="button"
+                onClick={() => void leaveFlow()}
+                style={{
+                  width: "100%",
+                  border: "none",
+                  borderRadius: 12,
+                  padding: "12px 16px",
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  background: "#38bdf8",
+                  color: "#020617",
+                }}
+              >
+                Close
+              </button>
+            ) : null}
+            {phase === "posting" ? (
+              <p style={{ margin: 0, fontSize: 13, color: "#94a3b8", textAlign: "center" }}>
+                Capturing session and handing off to automation…
+              </p>
+            ) : null}
+          </div>
+        </div>
       ) : null}
-
-      {sessionInfo ? (
-        <pre
-          style={{
-            background: "#f9fafb",
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-            padding: 12,
-            fontSize: 12,
-            marginBottom: 16,
-            overflow: "auto",
-          }}
-        >
-          {JSON.stringify(sessionInfo, null, 2)}
-        </pre>
-      ) : null}
-
-      {session ? (
-        <RemoteBrowser
-          sessionId={session.sessionId}
-          viewerToken={session.viewerToken}
-          wsUrl={session.wsUrl}
-          chrome="full"
-          showSessionStatus
-          interactive
-          onControlChange={(holder) => log(`control:${holder}`)}
-          onTerminated={(reason) => {
-            log(`terminated:${reason}`);
-            setSession(null);
-            setXSnapshot(null);
-          }}
-          style={{ marginTop: 8 }}
-        />
-      ) : (
-        <p style={{ color: "#6b7280" }}>
-          Create a session (generic or X flow) to open the viewer WebSocket and render frames.
-        </p>
-      )}
-
-      <section style={{ marginTop: 28 }}>
-        <h2 style={{ fontSize: 16 }}>Event log</h2>
-        <ul
-          style={{
-            fontSize: 12,
-            color: "#374151",
-            paddingLeft: 18,
-            maxHeight: 200,
-            overflow: "auto",
-          }}
-        >
-          {events.map((e, i) => (
-            <li key={`${i}-${e}`}>{e}</li>
-          ))}
-        </ul>
-      </section>
-
-      <footer style={{ marginTop: 32, fontSize: 12, color: "#9ca3af" }}>
-        <code>@atrium/protocol</code> types power the wire format; run{" "}
-        <code>pnpm --filter @atrium/cli exec atrium doctor</code> from the repo root for the CLI
-        placeholder.
-      </footer>
     </div>
   );
 }

@@ -108,6 +108,22 @@ describe("RemoteBrowser", () => {
     expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
   });
 
+  it("fullScreen shows an exit control bar", async () => {
+    render(
+      <RemoteBrowser
+        sessionId="sid"
+        viewerToken="tok"
+        wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
+        fullScreen
+        chrome="minimal"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Exit full screen" })).toBeInTheDocument();
+    });
+  });
+
   it("custom chrome can enable only the tab strip", async () => {
     render(
       <RemoteBrowser
