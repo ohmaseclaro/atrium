@@ -67,6 +67,20 @@ pnpm --dir packages/cli publish --access public
 
 For a future all-at-once release, `pnpm -r publish --access public` is acceptable once the package order is known to work in CI.
 
+## CI: token and GitHub Actions
+
+**Do not commit tokens.** Never put an npm token in the repo, in `.npmrc` checked into git, or in client-side env files.
+
+1. **Create a token on npm** (logged in as `ohmaseclaro` or an org bot with publish rights to `@ohmaseclaro`):
+   - Prefer **Granular Access Token**: npm → Access Tokens → Generate New Token → type **Granular** → select only the five `@ohmaseclaro/atrium-*` packages (or the whole `@ohmaseclaro` scope if you accept broader blast radius) → enable **Read and write** for those packages → under **Packages and scopes**, ensure **Publish** is allowed.
+   - Legacy **Automation** tokens still work for non-interactive publish; rotate them periodically.
+
+2. **Store it only as a GitHub secret**: repository **Settings → Secrets and variables → Actions → New repository secret**. Name: **`NPM_TOKEN`**. Paste the token once; GitHub encrypts it and only injects it into workflows you configure.
+
+3. **Run the publish workflow**: **Actions → “Publish to npm” → Run workflow** (manual `workflow_dispatch`). The workflow is `.github/workflows/npm-publish.yml`; it runs `pnpm publish:check` then publishes each public package in order using `NODE_AUTH_TOKEN` (set from `secrets.NPM_TOKEN`).
+
+4. **Optional hardening**: restrict the token’s packages on npm; use **environment** secrets with required reviewers for production releases; enable **branch protection** on `main` so only reviewed merges trigger automation if you later add `push`/`release` triggers.
+
 ## Versioning
 
 For now, keep versions aligned across the public packages. A simple release should bump all five public packages to the same version before publishing.
