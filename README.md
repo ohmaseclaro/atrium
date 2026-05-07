@@ -19,7 +19,7 @@ This repository is a **pnpm monorepo** (`packages/*`) implementing the architect
 - **Multi-tab** — `target="_blank"` opens a managed tab; the worker emits **`tabs`** over the viewer WebSocket.
 - **Optional viewer chrome** — [`@atrium/react`](packages/react/README.md) supports presets **`none`**, **`minimal`**, **`full`**, or custom `{ showTabStrip?, showToolbar?, showUrlBar? }` around the live canvas.
 - **TLS client certificates (mTLS)** — upload a PEM or PFX bundle on `POST /sessions` (`clientCertificates`) and Chromium presents it to the matching origin.
-- **Passkey-aware viewer** — when the remote page calls `navigator.credentials.{get,create}`, `<RemoteBrowser />` shows a modal so the user can **Continue** (Chromium's native "use a passkey on another device" QR flow) or **Skip** (fall back to password). Details: [user guide §7](docs/user-guide.md#7-authentication-with-certificates-passkeys-and-hardware-keys).
+- **Passkey-aware viewer** — when the remote page calls `navigator.credentials.{get,create}`, `<RemoteBrowser />` shows a modal so the user can **sign in on their own browser** (and bring the session back via `POST /sessions/:id/session-snapshot`) or **fall back** to password / OTP. Chromium's native passkey dialog is intentionally **not** surfaced — it's an OS dialog the screencast can't capture. Details: [user guide §7](docs/user-guide.md#7-authentication-with-certificates-passkeys-and-hardware-keys).
 
 ## Try the full demo first
 

@@ -185,21 +185,26 @@ Notes:
 - Certificates also persist across **`POST /sessions/:id/session-snapshot`** (the API rebuilds the context with the same client certs).
 - Multiple entries are allowed; each is matched by **`origin`**.
 
-### 7b. Passkeys / WebAuthn — detected, with handoff
+### 7b. Passkeys / WebAuthn — detected, with honest handoff
 
-A WebAuthn signature is bound to the **rpId** (e.g. `google.com`); a relay where the user's browser is at a different origin (e.g. `localhost:3333`) **cannot** produce a valid assertion — the spec is intentionally unrelayable. Atrium does the next best thing:
+Two reasons a "pure relay" of WebAuthn through Atrium can't work:
 
-1. **Detect** — every `BrowserContext` is wrapped with an init script that intercepts `navigator.credentials.{get,create}` calls with a `publicKey` (passkey).
-2. **Prompt** — the worker emits a **`webauthn_required`** WebSocket message; **`<RemoteBrowser />`** opens a built-in modal: **Continue** (let Chromium's native UI run, including the cross-device QR flow) or **Skip** (the call rejects with `NotAllowedError` so the site falls back to password / OTP).
-3. **Decide** — the client sends **`webauthn_decision`** (`proceed` / `dismiss`); the gate resolves and the page continues.
+1. A WebAuthn signature is bound to the **rpId** (e.g. `google.com`); a relay where the user's browser is at a different origin **cannot** produce a valid assertion — the spec is intentionally unrelayable.
+2. Chromium's passkey UI (incl. the **"use a passkey on another device"** QR window) is an **OS-level dialog**, not page HTML. `Page.startScreencast` doesn't capture it; the user would never see it from the viewer.
 
-Authentic options for users:
+Atrium therefore detects the call and surfaces a sane handoff:
 
-| Option                              | Path                                                                                                                                                                                                |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Use a passkey on another device** | Click **Continue** → Chromium shows the native "use a passkey on another device" UI (QR code). User scans with their phone, ceremony runs locally on the phone.                                     |
-| **Use my own browser instead**      | Click **Skip** → site falls back. User signs in on **their own** browser, exports cookies / `storageState`, then **`POST /sessions/:id/session-snapshot`** to bring the authenticated session back. |
-| **Programmatic skip**               | Set **`webauthnPrompt={false}`** on `<RemoteBrowser />` to auto-`proceed` for every request (Chromium's native UI shows directly).                                                                  |
+1. **Detect** — every `BrowserContext` is wrapped with an init script that intercepts `navigator.credentials.{get,create}` calls with a `publicKey`.
+2. **Prompt** — the worker emits **`webauthn_required`**; **`<RemoteBrowser />`** opens a modal with **Use another method** and **Sign in on my browser →**.
+3. **Decide** — the client sends **`webauthn_decision`** (`proceed` / `dismiss`). Both modal buttons resolve as **`dismiss`** — the second one also calls `window.open(<rpId or origin>)` on the user's machine so they can sign in there.
+
+Honest options for users:
+
+| Option                               | Path                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Use my own browser** (recommended) | Click **Sign in on my browser →** — opens the rpId / origin in a new tab on the user's machine, dismisses the remote call. After the user signs in locally (passkey works there as normal), apply their cookies / `storageState` via **`POST /sessions/:id/session-snapshot`**; the live session rebuilds with the authenticated state. |
+| **Use another sign-in method**       | Click **Use another method** — `dismiss` resolves the page-side promise with `NotAllowedError`; the site falls back to password / OTP / SMS in the same canvas.                                                                                                                                                                         |
+| **Programmatic**                     | Pair **`webauthnPrompt={false}`** + **`onWebAuthnRequest`** for fully custom UX (auto-dismiss + your own dialog).                                                                                                                                                                                                                       |
 
 Customization:
 
@@ -211,7 +216,7 @@ Customization:
 />
 ```
 
-The viewer never sees the WebAuthn challenge or signature — only metadata (`rpId`, `origin`, `ceremony`).
+The viewer never sees the WebAuthn challenge or signature — only metadata (`rpId`, `origin`, `ceremony`). Sending `proceed` is technically allowed by the protocol but rarely useful: it triggers Chromium's native dialog on the worker host, where remote viewers can't see or interact with it.
 
 ### 7c. Hardware keys (YubiKey U2F/FIDO2) — workaround
 

@@ -125,7 +125,7 @@ describe("RemoteBrowser", () => {
     expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
   });
 
-  it("opens passkey modal and sends decision back over WebSocket", async () => {
+  it("opens passkey modal and dismisses on 'Use another method'", async () => {
     render(
       <RemoteBrowser
         sessionId="sid"
@@ -152,7 +152,7 @@ describe("RemoteBrowser", () => {
     expect(dialog).toBeInTheDocument();
     expect(screen.getByText(/Passkey requested by google\.com/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Skip/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Use another method/ }));
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -162,7 +162,44 @@ describe("RemoteBrowser", () => {
     expect(sent).toContainEqual({ t: "webauthn_decision", id: "req-1", decision: "dismiss" });
   });
 
-  it("auto-proceeds and skips the modal when webauthnPrompt={false}", async () => {
+  it("'Sign in on my browser' opens the rpId in a new tab and dismisses", async () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(
+      <RemoteBrowser
+        sessionId="sid"
+        viewerToken="tok"
+        wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeWebSocket.last).not.toBeNull();
+    });
+
+    act(() => {
+      FakeWebSocket.last!.emitMessage({
+        t: "webauthn_required",
+        id: "byo-1",
+        ceremony: "get",
+        rpId: "google.com",
+        origin: "https://accounts.google.com",
+      });
+    });
+
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: /Sign in on my browser/ }));
+
+    expect(openSpy).toHaveBeenCalledWith(
+      "https://accounts.google.com",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    const sent = FakeWebSocket.last!.sent.map((s) => JSON.parse(s));
+    expect(sent).toContainEqual({ t: "webauthn_decision", id: "byo-1", decision: "dismiss" });
+    openSpy.mockRestore();
+  });
+
+  it("auto-dismisses (does not skip) when webauthnPrompt={false}", async () => {
     render(
       <RemoteBrowser
         sessionId="sid"
@@ -190,7 +227,7 @@ describe("RemoteBrowser", () => {
       expect(sent).toContainEqual({
         t: "webauthn_decision",
         id: "auto-1",
-        decision: "proceed",
+        decision: "dismiss",
       });
     });
 

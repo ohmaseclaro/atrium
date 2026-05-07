@@ -40,8 +40,8 @@ import { RemoteBrowser } from "@atrium/react";
 | **`showSessionStatus`** | `boolean`                    | Session / control status line. Default: **`true`** if no chrome; **`false`** if any chrome region is on (set explicitly to show both). |
 | **`onControlChange`**   | `(holder) => void`           | `agent` \| `human` \| `idle`.                                                                                                          |
 | **`onTerminated`**      | `(reason) => void`           | Session ended.                                                                                                                         |
-| **`webauthnPrompt`**    | `boolean`                    | Default `true`. When `false`, auto-proceed every passkey request (Chromium's native UI handles the user).                              |
-| **`onWebAuthnRequest`** | `(req) => void`              | Telemetry hook for passkey requests (`{ id, ceremony, rpId, origin }`).                                                                |
+| **`webauthnPrompt`**    | `boolean`                    | Default `true`. When `false`, auto-**dismiss** every passkey request so the site falls back to password / OTP.                         |
+| **`onWebAuthnRequest`** | `(req) => void`              | Telemetry / custom-UX hook for passkey requests (`{ id, ceremony, rpId, origin }`).                                                    |
 | **`style`**             | `CSSProperties`              | Root wrapper.                                                                                                                          |
 
 ### Optional chrome (`chrome` prop)
@@ -72,12 +72,14 @@ const flags = resolveRemoteBrowserChrome("minimal");
 
 ### Passkey / WebAuthn modal
 
-When the remote page calls `navigator.credentials.{get,create}` with a `publicKey`, the worker sends a `webauthn_required` event and `<RemoteBrowser />` opens a built-in modal:
+When the remote page calls `navigator.credentials.{get,create}` with a `publicKey`, the worker sends a `webauthn_required` event and `<RemoteBrowser />` opens a built-in modal with two actions:
 
-- **Continue** — Chromium's native passkey UI takes over (including cross-device QR for "use a passkey on another device").
-- **Skip** — the page-side promise rejects with `NotAllowedError` so the site can offer password / OTP fallback.
+- **Use another method** — sends `webauthn_decision: dismiss`; the page rejects with `NotAllowedError` so the site falls back to password / OTP.
+- **Sign in on my browser →** — opens the rpId / origin in a new tab on the **user's** machine and dismisses the remote call. After the user signs in locally, your host applies their cookies / `storageState` via `POST /sessions/:id/session-snapshot`.
 
-Disable the built-in modal with `webauthnPrompt={false}` (auto-proceeds), or wire your own UX by combining `webauthnPrompt={false}` with `onWebAuthnRequest={(req) => …}`.
+Why no "Continue / native passkey" button? Chromium's passkey UI (including the cross-device QR window) is an OS-level dialog rendered outside the page, so the screencast doesn't capture it — letting the page proceed would just hang the remote tab.
+
+Disable the built-in modal with `webauthnPrompt={false}` (auto-dismisses every request — useful when you've wired your own UX via `onWebAuthnRequest`).
 
 ### Pointer coordinates
 

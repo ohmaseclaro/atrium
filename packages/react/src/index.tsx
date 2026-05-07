@@ -71,8 +71,17 @@ export type RemoteBrowserProps = {
   showSessionStatus?: boolean;
   /**
    * When the remote page invokes `navigator.credentials.{get,create}` with a `publicKey`
-   * (passkey / WebAuthn), the viewer prompts the user. `false` disables the built-in modal
-   * (the call is auto-allowed so Chromium's native UI shows). Default `true`.
+   * (passkey / WebAuthn), the viewer prompts the user.
+   * - `true` (default) — show built-in modal: "Sign in on my browser" / "Use another method".
+   * - `false` — auto-dismiss every passkey request (the page rejects with `NotAllowedError`
+   *   so the site can fall back to password / OTP); use this when you've already wired
+   *   `onWebAuthnRequest` to a custom UI.
+   *
+   * **Why not "Continue"?** Chromium's passkey UI (incl. the cross-device QR window) is a
+   * native OS dialog rendered outside the page; the screencast can't capture it, so on a
+   * worker host the user would never see it. Atrium's honest path is to either skip the
+   * passkey or sign in on the user's own browser and bring the session back via
+   * `POST /sessions/:id/session-snapshot`.
    */
   webauthnPrompt?: boolean;
   /** Notified whenever a passkey ceremony is requested (for telemetry / custom UX). */
@@ -155,7 +164,10 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
             if (webauthnPrompt) {
               setWebauthnRequest(req);
             } else {
-              sendWs(ws, { t: "webauthn_decision", id: msg.id, decision: "proceed" });
+              /** Auto-dismiss: passkey UI is invisible from a remote browser, so the safe
+               *  default is to let the site fall back. Apps wanting custom flows pair
+               *  `webauthnPrompt={false}` with `onWebAuthnRequest`. */
+              sendWs(ws, { t: "webauthn_decision", id: msg.id, decision: "dismiss" });
             }
           }
           if (msg.t === "navigate") {
@@ -575,6 +587,21 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
     setWebauthnRequest(null);
   };
 
+  const openInMyBrowser = (): void => {
+    const target =
+      webauthnRequest?.origin ||
+      (webauthnRequest?.rpId ? `https://${webauthnRequest.rpId}/` : null) ||
+      activeUrl;
+    if (target && typeof window !== "undefined") {
+      try {
+        window.open(target, "_blank", "noopener,noreferrer");
+      } catch {
+        /* popup blocked — user can copy/paste the URL */
+      }
+    }
+    decideWebAuthn("dismiss");
+  };
+
   const webauthnRpLabel = (() => {
     if (!webauthnRequest) return "";
     if (webauthnRequest.rpId) return webauthnRequest.rpId;
@@ -648,16 +675,26 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
             <h2 id="atrium-webauthn-title" style={{ margin: "0 0 8px", fontSize: 18 }}>
               Passkey requested by {webauthnRpLabel}
             </h2>
-            <p style={{ margin: "0 0 12px", fontSize: 13, lineHeight: 1.5, color: "#374151" }}>
-              The remote browser is asking for a passkey (
-              {webauthnRequest.ceremony === "create" ? "register" : "sign in"}
-              ). You can continue here — Chrome will offer to use a passkey on another device (QR
-              code on your phone) — or skip and use a different sign-in option (e.g. password).
+            <p style={{ margin: "0 0 10px", fontSize: 13, lineHeight: 1.5, color: "#374151" }}>
+              {webauthnRequest.ceremony === "create"
+                ? "This site wants to register a passkey, "
+                : "This site wants to sign in with a passkey, "}
+              but passkeys are stored on your local device and can&rsquo;t be used inside this
+              remote browser.
             </p>
-            <p style={{ margin: "0 0 16px", fontSize: 12, lineHeight: 1.5, color: "#6b7280" }}>
-              Your passkey, fingerprint, or hardware key never leaves your device.
+            <p style={{ margin: "0 0 16px", fontSize: 13, lineHeight: 1.5, color: "#374151" }}>
+              You can <strong>sign in on your own browser</strong> (your passkey works there as
+              normal) and bring the resulting session back, or pick a{" "}
+              <strong>different sign-in method</strong> on the remote site.
             </p>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                justifyContent: "flex-end",
+                flexWrap: "wrap",
+              }}
+            >
               <button
                 type="button"
                 onClick={() => decideWebAuthn("dismiss")}
@@ -671,11 +708,11 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
                   color: "#374151",
                 }}
               >
-                Skip (use another sign-in)
+                Use another method
               </button>
               <button
                 type="button"
-                onClick={() => decideWebAuthn("proceed")}
+                onClick={openInMyBrowser}
                 style={{
                   padding: "8px 14px",
                   borderRadius: 8,
@@ -687,7 +724,7 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
                   fontWeight: 600,
                 }}
               >
-                Continue
+                Sign in on my browser →
               </button>
             </div>
           </div>
