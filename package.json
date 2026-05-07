@@ -26,7 +26,8 @@
   },
   "scripts": {
     "build": "pnpm -r run build",
-    "lint": "eslint . --max-warnings 0 && prettier --check . && pnpm -r --if-present run typecheck",
+    "build:libs": "pnpm --filter @atriumjs/protocol build && pnpm --filter @atriumjs/core build && pnpm --filter @atriumjs/express build && pnpm --filter @atriumjs/react build && pnpm --filter @atriumjs/worker build",
+    "lint": "pnpm run build:libs && eslint . --max-warnings 0 && prettier --check . && pnpm -r --if-present run typecheck",
     "lint:fix": "eslint . --fix --max-warnings 0 && prettier --write .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
