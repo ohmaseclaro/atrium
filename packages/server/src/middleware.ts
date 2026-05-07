@@ -48,7 +48,8 @@ export function atrium(config: AtriumConfig): AtriumMount {
       hasStorageState ||
       (b.cookies?.length ?? 0) > 0 ||
       (b.initialUrl !== undefined && b.initialUrl.length > 0) ||
-      b.viewport !== undefined;
+      b.viewport !== undefined ||
+      (b.clientCertificates?.length ?? 0) > 0;
 
     const record = store.createSession(principal);
 
@@ -58,6 +59,7 @@ export function atrium(config: AtriumConfig): AtriumMount {
       if (b.cookies !== undefined) payload.cookies = b.cookies;
       if (b.initialUrl !== undefined) payload.initialUrl = b.initialUrl;
       if (b.viewport !== undefined) payload.viewport = b.viewport;
+      if (b.clientCertificates !== undefined) payload.clientCertificates = b.clientCertificates;
 
       const r = await workerInternalFetch(
         config.workerDialBase,

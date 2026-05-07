@@ -104,8 +104,30 @@ export function parseClientMessage(data: unknown): ClientMessage {
 }
 
 /**
+ * One TLS client certificate / private key pair, scoped to an `origin` (e.g. `https://api.example.com`).
+ * Forwarded to Playwright's `BrowserContextOptions.clientCertificates` on the worker.
+ *
+ * Provide either a **PEM** pair (`certBase64` + `keyBase64`) or a **PFX/PKCS#12** bundle (`pfxBase64` + `passphrase`).
+ * All bytes are base64-encoded so they can travel over JSON without binary handling.
+ */
+export const clientCertificateSchema = z
+  .object({
+    origin: z.string().url(),
+    certBase64: z.string().min(1).optional(),
+    keyBase64: z.string().min(1).optional(),
+    pfxBase64: z.string().min(1).optional(),
+    passphrase: z.string().optional(),
+  })
+  .strict()
+  .refine((v) => (v.certBase64 != null && v.keyBase64 != null) || v.pfxBase64 != null, {
+    message: "provide_pem_pair_or_pfx",
+  });
+export type ClientCertificate = z.infer<typeof clientCertificateSchema>;
+
+/**
  * Optional body for `POST /sessions` — applied on the worker before the first viewer WebSocket connects.
- * Shape matches Playwright `BrowserContextOptions.storageState` plus optional extra cookies and start URL.
+ * Shape matches Playwright `BrowserContextOptions.storageState` plus optional extra cookies, start URL,
+ * and `clientCertificates` (so mTLS prompts use the user's certificate, not a cert installed on the worker host).
  */
 export const sessionBootstrapBodySchema = z
   .object({
@@ -118,6 +140,7 @@ export const sessionBootstrapBodySchema = z
         h: z.number().int().positive(),
       })
       .optional(),
+    clientCertificates: z.array(clientCertificateSchema).optional(),
   })
   .strict();
 export type SessionBootstrapBody = z.infer<typeof sessionBootstrapBodySchema>;

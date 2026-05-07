@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { Browser, BrowserContext, CDPSession, Cookie, Page } from "playwright";
+import type {
+  Browser,
+  BrowserContext,
+  BrowserContextOptions,
+  CDPSession,
+  Cookie,
+  Page,
+} from "playwright";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   chromium,
@@ -8,8 +15,44 @@ import {
   desktopContextHints,
   stealthLaunchOptions,
 } from "./stealth-chromium.js";
-import type { ClientMessage, ControlHolder, ControlState } from "@atrium/protocol";
+import type {
+  ClientCertificate,
+  ClientMessage,
+  ControlHolder,
+  ControlState,
+} from "@atrium/protocol";
 import { parseClientMessage } from "@atrium/protocol";
+
+/** Decoded client cert ready to hand to Playwright `newContext({ clientCertificates })`. */
+type ClientCertificateRuntime = {
+  origin: string;
+  cert?: Buffer;
+  key?: Buffer;
+  pfx?: Buffer;
+  passphrase?: string;
+};
+
+function decodeClientCertificates(
+  list: ClientCertificate[] | undefined,
+): ClientCertificateRuntime[] | undefined {
+  if (!list?.length) return undefined;
+  return list.map((c) => {
+    const out: ClientCertificateRuntime = { origin: c.origin };
+    if (c.certBase64) out.cert = Buffer.from(c.certBase64, "base64");
+    if (c.keyBase64) out.key = Buffer.from(c.keyBase64, "base64");
+    if (c.pfxBase64) out.pfx = Buffer.from(c.pfxBase64, "base64");
+    if (c.passphrase != null) out.passphrase = c.passphrase;
+    return out;
+  });
+}
+
+function applyClientCertificates(
+  base: BrowserContextOptions,
+  certs: ClientCertificateRuntime[] | undefined,
+): BrowserContextOptions {
+  if (!certs?.length) return base;
+  return { ...base, clientCertificates: certs as never };
+}
 
 export type WorkerServerOptions = {
   port: number;
@@ -45,6 +88,8 @@ type LiveSession = {
   frameSeq: number;
   tabBroadcastTimer?: ReturnType<typeof setTimeout>;
   screencastFrameListener?: (payload: ScreencastFramePayload) => Promise<void>;
+  /** Persisted across context rebuilds (e.g. `replaceLiveSessionStorage`). */
+  clientCertificates?: ClientCertificateRuntime[];
 };
 
 const sessions = new Map<string, LiveSession>();
@@ -54,6 +99,7 @@ type PendingBootstrap = {
   cookies?: unknown[];
   initialUrl?: string;
   viewport?: { width: number; height: number };
+  clientCertificates?: ClientCertificate[];
 };
 
 const pendingBootstraps = new Map<string, PendingBootstrap>();
@@ -113,11 +159,30 @@ function parseBootstrapPayload(raw: unknown): PendingBootstrap | null {
       out.viewport = { width: Math.floor(w), height: Math.floor(h) };
     }
   }
+  if (Array.isArray(o.clientCertificates)) {
+    const valid: ClientCertificate[] = [];
+    for (const item of o.clientCertificates) {
+      if (!item || typeof item !== "object") continue;
+      const c = item as Record<string, unknown>;
+      const origin = typeof c.origin === "string" ? c.origin : null;
+      if (!origin) continue;
+      const certBase64 = typeof c.certBase64 === "string" ? c.certBase64 : undefined;
+      const keyBase64 = typeof c.keyBase64 === "string" ? c.keyBase64 : undefined;
+      const pfxBase64 = typeof c.pfxBase64 === "string" ? c.pfxBase64 : undefined;
+      const passphrase = typeof c.passphrase === "string" ? c.passphrase : undefined;
+      const hasPem = certBase64 != null && keyBase64 != null;
+      const hasPfx = pfxBase64 != null;
+      if (!hasPem && !hasPfx) continue;
+      valid.push({ origin, certBase64, keyBase64, pfxBase64, passphrase });
+    }
+    if (valid.length > 0) out.clientCertificates = valid;
+  }
   if (
     out.storageState === undefined &&
     (out.cookies?.length ?? 0) === 0 &&
     out.initialUrl === undefined &&
-    out.viewport === undefined
+    out.viewport === undefined &&
+    (out.clientCertificates?.length ?? 0) === 0
   ) {
     return null;
   }
@@ -604,7 +669,7 @@ async function replaceLiveSessionStorage(
 
   await live.context.close().catch(() => undefined);
 
-  const hints = desktopContextHints(size);
+  const hints = applyClientCertificates(desktopContextHints(size), live.clientCertificates);
   let context: BrowserContext;
   if (payload.storageState != null && typeof payload.storageState === "object") {
     context = await live.browser.newContext({
@@ -761,7 +826,8 @@ async function attachSessionPipeline(
     const headless = options.headless ?? process.env.ATRIUM_WORKER_HEADLESS === "1";
     browser = await chromium.launch(stealthLaunchOptions(headless, viewport));
 
-    const hints = desktopContextHints(viewport);
+    const decodedCerts = decodeClientCertificates(pending?.clientCertificates);
+    const hints = applyClientCertificates(desktopContextHints(viewport), decodedCerts);
 
     if (pending?.storageState != null && typeof pending.storageState === "object") {
       context = await browser.newContext({
@@ -795,6 +861,7 @@ async function attachSessionPipeline(
       control: initialControl,
       screencast,
       frameSeq: 0,
+      clientCertificates: decodedCerts,
     };
     sessions.set(sessionId, live);
     registerFirstTab(live, page, firstTabId);

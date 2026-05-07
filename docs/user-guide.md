@@ -141,13 +141,72 @@ Host routes must use **your** authentication (`authorize`); viewer WebSocket use
 
 ---
 
-## 7. Session snapshots
+## 7. Authentication with certificates, passkeys, and hardware keys
+
+Atrium runs Chromium **on your worker host**, so any credential that lives on the **end user's** machine is not natively available inside the remote browser. This affects three flows in different ways:
+
+### 7a. TLS client certificates (mTLS) — supported
+
+Pass certificates in the **`POST /sessions`** body. They are forwarded once to the worker and used by Playwright's **`BrowserContextOptions.clientCertificates`**, scoped to a specific **`origin`** (so they only apply to the site that asks for them).
+
+**PEM cert + key:**
+
+```json
+{
+  "initialUrl": "https://app.example.com/login",
+  "clientCertificates": [
+    {
+      "origin": "https://app.example.com",
+      "certBase64": "<base64 of cert.pem>",
+      "keyBase64": "<base64 of key.pem>"
+    }
+  ]
+}
+```
+
+**PFX / PKCS#12 bundle:**
+
+```json
+{
+  "clientCertificates": [
+    {
+      "origin": "https://app.example.com",
+      "pfxBase64": "<base64 of bundle.pfx>",
+      "passphrase": "optional"
+    }
+  ]
+}
+```
+
+Notes:
+
+- Certs are kept **in worker memory** for the session and discarded when it ends. They are **never** sent to the viewer browser.
+- Make sure the **`POST /sessions`** call is over **HTTPS** (your `authorize` middleware should enforce auth).
+- Certificates also persist across **`POST /sessions/:id/session-snapshot`** (the API rebuilds the context with the same client certs).
+- Multiple entries are allowed; each is matched by **`origin`**.
+
+### 7b. Passkeys / WebAuthn — workaround
+
+WebAuthn (passkeys, Touch ID, Windows Hello) requires the platform authenticator on the **user's machine**. Today Atrium does **not** relay WebAuthn ceremonies. Two workable paths:
+
+1. **Bring-your-own-session** — let the user sign in **on their own browser**, export cookies / `storageState`, then **`POST /sessions/:id/session-snapshot`** to apply it to the remote session.
+2. **Account password / SMS / OTP** — if the site offers a non-passkey factor, the human-in-the-loop flow handles it directly in the canvas.
+
+A first-class WebAuthn relay (CDP `WebAuthn.addVirtualAuthenticator` + viewer-side ceremony) is on the roadmap.
+
+### 7c. Hardware keys (YubiKey U2F/FIDO2) — workaround
+
+Same constraint as passkeys: the key is physically attached to the user's device. Use the **bring-your-own-session** flow above, or fall back to a non-hardware factor.
+
+---
+
+## 8. Session snapshots
 
 Export a **single JSON** blob (`cookies` + `storageState`) for backups or seeding a new session. Examples and curl snippets: [Main README — Session snapshots](../README.md#session-snapshots-cookies--storagestate).
 
 ---
 
-## 8. Security checklist (production)
+## 9. Security checklist (production)
 
 - Rotate **`ATRIUM_WORKER_SECRET`**; only your API should reach the worker dial URL.
 - Treat **`viewerToken`** like a **capability URL** — short TTL, HTTPS `wss://` in production.
@@ -157,12 +216,12 @@ More: [Main README — Security notes](../README.md#security-notes-public-facing
 
 ---
 
-## 9. Wire protocol types
+## 10. Wire protocol types
 
 Validate or explore message shapes with **`@atrium/protocol`** (`parseServerMessage`, `parseClientMessage`, exported schemas). See [`packages/protocol/README.md`](../packages/protocol/README.md).
 
 ---
 
-## 10. Contributing
+## 11. Contributing
 
 Issues and PRs welcome. For protocol or security proposals, read [Technical design](./remote-browser-design.md) first.
