@@ -80,7 +80,10 @@ There is **no Docker** requirement for the landing page or the demo Node process
 
 ## GitHub Actions
 
-Workflow: `.github/workflows/deploy-demo.yml` (repository root). On pushes to `main` that touch the demo, libraries, lockfile, or **`deploy/**`**, it runs **lint → test → build**, SSHs to the VPS, runs `./deploy/update-demo.sh`, then checks **demo** (`/atrium/healthz` on loopback) and **landing** (HTTPS `GET /` to loopback with `--resolve atriumjs.dev:443:127.0.0.1`).
+Workflow: `.github/workflows/deploy-demo.yml` (repository root). On pushes to `main` that touch the demo, libraries, lockfile, or **`deploy/**`**, it runs **lint → test → build**, SSHs to the VPS, runs `./deploy/update-demo.sh`, then verifies:
+
+- **demo** — `GET /atrium/healthz` on loopback (`http://127.0.0.1` and the demo `PORT` from `deploy/atrium-demo.env`).
+- **landing** — `GET /` over HTTPS to loopback, e.g. `curl --resolve atriumjs.dev:443:127.0.0.1 https://atriumjs.dev/`.
 
 **Secrets** — add them on **this** repository (forks do not inherit secrets from other repos). If `SSH_HOST` is missing, the deploy job fails immediately with a clear error (instead of `ssh-action`’s “missing server host”).
 
