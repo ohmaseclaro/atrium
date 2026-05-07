@@ -13,6 +13,7 @@ This repository is a **pnpm monorepo** (`packages/*`) implementing the architect
 | [**Documentation hub**](docs/README.md)               | Index linking **every package README**, examples, design doc, and sprint artifacts.                                                  |
 | [**Technical design**](docs/remote-browser-design.md) | Architecture, wire protocol, deployment narrative.                                                                                   |
 | [**npm publishing**](docs/npm-publishing.md)          | Package split, prepublish checks, tarball inspection, and publish order for `@atriumjs/*`.                                           |
+| [**Public demo deploy**](deploy/README.md)            | SSH + nginx + systemd for **demo.atriumjs.dev** (same VPS pattern as Capitanias).                                                      |
 | [**Sprint artifacts**](docs/artifacts/README.md)      | Spec, progress, [`sprint-bundle.json`](docs/artifacts/sprint-bundle.json), per-sprint contracts.                                     |
 
 ### For integrators

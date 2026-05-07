@@ -1,0 +1,19 @@
+[Unit]
+Description=Atrium public demo (demo.atriumjs.dev)
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/home/atrium/packages/demo
+EnvironmentFile=-/home/atrium/deploy/atrium-demo.env
+ExecStart=/home/atrium/deploy/run-demo.sh
+Restart=on-failure
+RestartSec=5
+
+# Hardening (adjust User/Group and paths when installing)
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
