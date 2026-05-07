@@ -72,8 +72,6 @@ type Sink = { ws: WebSocket | null };
 
 type ScreencastFramePayload = { data: string; sessionId: number };
 
-type WebAuthnDecision = "proceed" | "dismiss";
-
 type LiveSession = {
   sessionId: string;
   sink: Sink;
@@ -92,7 +90,6 @@ type LiveSession = {
   screencastFrameListener?: (payload: ScreencastFramePayload) => Promise<void>;
   /** Persisted across context rebuilds (e.g. `replaceLiveSessionStorage`). */
   clientCertificates?: ClientCertificateRuntime[];
-  pendingWebAuthn: Map<string, (d: WebAuthnDecision) => void>;
 };
 
 const sessions = new Map<string, LiveSession>();
@@ -425,83 +422,81 @@ function wireContextNewTabListener(live: LiveSession): void {
 }
 
 /**
- * Init script injected into every page of a context: wraps `navigator.credentials.{get,create}`.
- * When called with a `publicKey` (WebAuthn), the wrapper asks the worker (via the
- * `__atriumWebAuthnRequest` binding) for the user's decision before invoking the original API.
+ * Init script injected into every page of a context. Goal: make WebAuthn appear
+ * **unsupported** so well-behaved sites don't even offer "Sign in with passkey", and any
+ * site that tries anyway fails fast (so the user sees password / OTP fallback immediately).
  *
- * - `proceed`: call the original API; Chromium's native passkey UI (incl. cross-device QR) shows.
- * - `dismiss`: throw `NotAllowedError` so the site falls back to password / other factor.
+ * - Pre-empt feature checks: `PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable`
+ *   and `isConditionalMediationAvailable` return `false`. Conditional UI mediation auto-rejects.
+ * - Wrap `navigator.credentials.{get,create}` with `publicKey`: throw `NotAllowedError`
+ *   immediately and notify the worker via the `__atriumWebAuthnRequest` binding (telemetry only;
+ *   the call doesn't await any decision).
  */
 const WEBAUTHN_INIT_SCRIPT = `
 (() => {
-  if (!navigator || !navigator.credentials) return;
-  const c = navigator.credentials;
-  const origGet = typeof c.get === "function" ? c.get.bind(c) : null;
-  const origCreate = typeof c.create === "function" ? c.create.bind(c) : null;
-  async function gate(ceremony, options) {
+  function notify(ceremony, options) {
     try {
       const pk = options && options.publicKey;
       const rpId = ceremony === "get" ? (pk && pk.rpId) : (pk && pk.rp && pk.rp.id);
       const fn = window.__atriumWebAuthnRequest;
-      if (typeof fn !== "function") return "proceed";
-      const decision = await fn({
+      if (typeof fn !== "function") return;
+      Promise.resolve(fn({
         ceremony,
         rpId: rpId || null,
         origin: location.origin,
-      });
-      return decision === "dismiss" ? "dismiss" : "proceed";
-    } catch (_e) {
-      return "proceed";
-    }
+      })).catch(function () {});
+    } catch (_e) { /* noop */ }
   }
+  try {
+    if (window.PublicKeyCredential) {
+      PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = function () {
+        return Promise.resolve(false);
+      };
+      PublicKeyCredential.isConditionalMediationAvailable = function () {
+        return Promise.resolve(false);
+      };
+    }
+  } catch (_e) { /* noop */ }
+  if (!navigator || !navigator.credentials) return;
+  const c = navigator.credentials;
+  const origGet = typeof c.get === "function" ? c.get.bind(c) : null;
+  const origCreate = typeof c.create === "function" ? c.create.bind(c) : null;
   if (origGet) {
     c.get = async function (options) {
       if (!options || !options.publicKey) return origGet(options);
-      const decision = await gate("get", options);
-      if (decision === "dismiss") {
-        throw new DOMException("Cancelled by user", "NotAllowedError");
-      }
-      return origGet(options);
+      notify("get", options);
+      throw new DOMException("Passkeys are not supported in this remote browser", "NotAllowedError");
     };
   }
   if (origCreate) {
     c.create = async function (options) {
       if (!options || !options.publicKey) return origCreate(options);
-      const decision = await gate("create", options);
-      if (decision === "dismiss") {
-        throw new DOMException("Cancelled by user", "NotAllowedError");
-      }
-      return origCreate(options);
+      notify("create", options);
+      throw new DOMException("Passkeys are not supported in this remote browser", "NotAllowedError");
     };
   }
 })();
 `;
 
-async function handleWebAuthnGate(live: LiveSession, payload: unknown): Promise<WebAuthnDecision> {
+/**
+ * Fire-and-forget telemetry: the page-side init script throws `NotAllowedError` immediately
+ * regardless of the binding's resolution, so we just emit `webauthn_required` for the viewer
+ * (used to show a brief toast) and return. No pending decision map needed.
+ */
+function notifyWebAuthnAttempt(live: LiveSession, payload: unknown): "dismiss" {
   const p = (payload ?? {}) as Record<string, unknown>;
   const ceremony = p.ceremony === "create" ? "create" : "get";
   const rpId = typeof p.rpId === "string" && p.rpId ? p.rpId : undefined;
   const origin = typeof p.origin === "string" && p.origin ? p.origin : undefined;
   const id = randomUUID();
   sendJson(live.sink, { t: "webauthn_required", id, ceremony, rpId, origin });
-  return new Promise<WebAuthnDecision>((resolve) => {
-    /** Fail-open after 60s so a stalled viewer doesn't deadlock the page forever. */
-    const timer = setTimeout(() => {
-      live.pendingWebAuthn.delete(id);
-      resolve("proceed");
-    }, 60_000);
-    live.pendingWebAuthn.set(id, (d) => {
-      clearTimeout(timer);
-      live.pendingWebAuthn.delete(id);
-      resolve(d);
-    });
-  });
+  return "dismiss";
 }
 
 async function wireWebAuthnGate(live: LiveSession): Promise<void> {
   await live.context
-    .exposeBinding("__atriumWebAuthnRequest", async (_source, payload: unknown) => {
-      return handleWebAuthnGate(live, payload);
+    .exposeBinding("__atriumWebAuthnRequest", (_source, payload: unknown) => {
+      return notifyWebAuthnAttempt(live, payload);
     })
     .catch(() => undefined);
   await live.context.addInitScript({ content: WEBAUTHN_INIT_SCRIPT });
@@ -745,9 +740,6 @@ async function destroyLiveSession(sessionId: string): Promise<void> {
   pendingBootstraps.delete(sessionId);
   pendingControl.delete(sessionId);
   if (live.tabBroadcastTimer) clearTimeout(live.tabBroadcastTimer);
-  /** Resolve any pending passkey gates so paused pages don't hang the close. */
-  for (const r of live.pendingWebAuthn.values()) r("dismiss");
-  live.pendingWebAuthn.clear();
   try {
     await live.context.close();
   } catch {
@@ -966,7 +958,6 @@ async function attachSessionPipeline(
       screencast,
       frameSeq: 0,
       clientCertificates: decodedCerts,
-      pendingWebAuthn: new Map(),
     };
     sessions.set(sessionId, live);
     registerFirstTab(live, page, firstTabId);
@@ -1005,8 +996,8 @@ async function attachSessionPipeline(
           return;
         }
         if (msg.t === "webauthn_decision") {
-          const r = liveNow.pendingWebAuthn.get(msg.id);
-          if (r) r(msg.decision);
+          /** No-op: page-side throws NotAllowedError immediately; this is accepted
+           *  from older clients for backward compatibility but is otherwise ignored. */
           return;
         }
         await dispatchClientInput(liveNow, msg);

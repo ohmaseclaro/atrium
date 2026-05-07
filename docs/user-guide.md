@@ -108,6 +108,7 @@ After **`POST …/sessions`**, you receive **`sessionId`**, **`viewerToken`**, a
 - **`interactive`** — when control is **`human`**, pointer and keyboard events on the canvas are sent to the worker.
 - **`chrome`** — optional UI: **`"none"`** (default), **`"minimal"`** (URL bar + back/forward/reload), **`"full"`** (tabs + toolbar + URL bar), or a custom object **`{ showTabStrip?, showToolbar?, showUrlBar? }`**.
 - **`showSessionStatus`** — toggles the small debug line (session id, control holder). Hidden by default when any chrome region is enabled unless you set it explicitly.
+- **`webauthnNotice`** — shows a 6s toast when a site attempts a passkey (which Atrium auto-rejects). Default `true`.
 
 Full props and wire messages: [`packages/react/README.md`](../packages/react/README.md).
 
@@ -125,17 +126,17 @@ Links that open **`target="_blank"`** (or “Open in new tab”) create a **new 
 
 All routes are under your **`mountPath`** (default **`/atrium`**). Typical set:
 
-| Method         | Path                             | Purpose                                                                                    |
-| -------------- | -------------------------------- | ------------------------------------------------------------------------------------------ |
-| `POST`         | `/sessions`                      | Create session; optional bootstrap body (`initialUrl`, `storageState`, cookies, viewport). |
-| `GET`          | `/sessions/:id`                  | Session metadata.                                                                          |
-| `DELETE`       | `/sessions/:id`                  | Destroy session.                                                                           |
-| `POST`         | `/sessions/:id/control`          | Grant or release control (`human` / `agent`).                                              |
-| `POST`         | `/sessions/:id/navigate`         | Host-driven navigation.                                                                    |
-| `GET`          | `/sessions/:id/cookies`          | Export cookies.                                                                            |
-| `GET`          | `/sessions/:id/storage-state`    | Playwright `storageState`.                                                                 |
-| `GET` / `POST` | `/sessions/:id/session-snapshot` | Combined snapshot; POST applies to live session.                                           |
-| `GET`          | `/healthz`, `/readyz`            | Health checks.                                                                             |
+| Method         | Path                             | Purpose                                                                                                          |
+| -------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `POST`         | `/sessions`                      | Create session; optional bootstrap body (`initialUrl`, `storageState`, cookies, viewport, `clientCertificates`). |
+| `GET`          | `/sessions/:id`                  | Session metadata.                                                                                                |
+| `DELETE`       | `/sessions/:id`                  | Destroy session.                                                                                                 |
+| `POST`         | `/sessions/:id/control`          | Grant or release control (`human` / `agent`).                                                                    |
+| `POST`         | `/sessions/:id/navigate`         | Host-driven navigation.                                                                                          |
+| `GET`          | `/sessions/:id/cookies`          | Export cookies.                                                                                                  |
+| `GET`          | `/sessions/:id/storage-state`    | Playwright `storageState`.                                                                                       |
+| `GET` / `POST` | `/sessions/:id/session-snapshot` | Combined snapshot; POST applies to live session.                                                                 |
+| `GET`          | `/healthz`, `/readyz`            | Health checks.                                                                                                   |
 
 Host routes must use **your** authentication (`authorize`); viewer WebSocket uses **`viewerToken`**.
 
@@ -185,42 +186,41 @@ Notes:
 - Certificates also persist across **`POST /sessions/:id/session-snapshot`** (the API rebuilds the context with the same client certs).
 - Multiple entries are allowed; each is matched by **`origin`**.
 
-### 7b. Passkeys / WebAuthn — detected, with honest handoff
+### 7b. Passkeys / WebAuthn — not supported (and pre-empted at the browser)
 
-Two reasons a "pure relay" of WebAuthn through Atrium can't work:
+**Atrium does not support passkeys.** WebAuthn was designed to be unrelayable — the user's authenticator signs the **rpId**'s origin, and that authenticator lives on the user's local device, not on the worker host. Chromium's passkey UI is also an OS-level dialog the screencast can't capture.
 
-1. A WebAuthn signature is bound to the **rpId** (e.g. `google.com`); a relay where the user's browser is at a different origin **cannot** produce a valid assertion — the spec is intentionally unrelayable.
-2. Chromium's passkey UI (incl. the **"use a passkey on another device"** QR window) is an **OS-level dialog**, not page HTML. `Page.startScreencast` doesn't capture it; the user would never see it from the viewer.
+To keep the user moving without confusing dead-ends, the worker **disguises the remote browser as a device with no passkey support** so well-behaved sites never even offer the passkey button:
 
-Atrium therefore detects the call and surfaces a sane handoff:
-
-1. **Detect** — every `BrowserContext` is wrapped with an init script that intercepts `navigator.credentials.{get,create}` calls with a `publicKey`.
-2. **Prompt** — the worker emits **`webauthn_required`**; **`<RemoteBrowser />`** opens a modal with **Use another method** and **Sign in on my browser →**.
-3. **Decide** — the client sends **`webauthn_decision`** (`proceed` / `dismiss`). Both modal buttons resolve as **`dismiss`** — the second one also calls `window.open(<rpId or origin>)` on the user's machine so they can sign in there.
-
-Honest options for users:
-
-| Option                               | Path                                                                                                                                                                                                                                                                                                                                    |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Use my own browser** (recommended) | Click **Sign in on my browser →** — opens the rpId / origin in a new tab on the user's machine, dismisses the remote call. After the user signs in locally (passkey works there as normal), apply their cookies / `storageState` via **`POST /sessions/:id/session-snapshot`**; the live session rebuilds with the authenticated state. |
-| **Use another sign-in method**       | Click **Use another method** — `dismiss` resolves the page-side promise with `NotAllowedError`; the site falls back to password / OTP / SMS in the same canvas.                                                                                                                                                                         |
-| **Programmatic**                     | Pair **`webauthnPrompt={false}`** + **`onWebAuthnRequest`** for fully custom UX (auto-dismiss + your own dialog).                                                                                                                                                                                                                       |
+1. **Init script** in every page overrides feature checks:
+   - `PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()` → `false`
+   - `PublicKeyCredential.isConditionalMediationAvailable()` → `false`
+2. **Chromium launch flags** disable cross-device passkey UI surfaces:
+   - `--disable-features=WebAuthenticationCableLinking,WebAuthenticationConditionalUI,WebAuthenticationCableServer`
+3. **If a site insists** and calls `navigator.credentials.{get,create}` with a `publicKey`, the wrapper throws **`NotAllowedError`** immediately so the site falls back to password / OTP / SMS in the same canvas.
+4. **Telemetry** — the worker still emits a **`webauthn_required`** message so the viewer can show a brief, **non-blocking toast**: _"Passkeys aren't available — pick a different sign-in option."_
 
 Customization:
 
 ```tsx
 <RemoteBrowser
   /* ... */
-  webauthnPrompt={true}
-  onWebAuthnRequest={(req) => log("passkey request:", req.rpId)}
+  webauthnNotice={true}
+  onWebAuthnRequest={(req) => log("passkey attempt:", req.rpId)}
 />
 ```
 
-The viewer never sees the WebAuthn challenge or signature — only metadata (`rpId`, `origin`, `ceremony`). Sending `proceed` is technically allowed by the protocol but rarely useful: it triggers Chromium's native dialog on the worker host, where remote viewers can't see or interact with it.
+| Prop                                  | Behavior                                                               |
+| ------------------------------------- | ---------------------------------------------------------------------- |
+| **`webauthnNotice={true}`** (default) | Show a brief 6s toast in the top-right when a site attempts a passkey. |
+| **`webauthnNotice={false}`**          | Stay silent; the page still rejects with `NotAllowedError`.            |
+| **`onWebAuthnRequest={(req) => …}`**  | Telemetry / custom UX hook with `{ id, ceremony, rpId, origin }`.      |
 
-### 7c. Hardware keys (YubiKey U2F/FIDO2) — workaround
+The viewer never sees the WebAuthn challenge or signature — only metadata (`rpId`, `origin`, `ceremony`).
 
-Same constraint as passkeys: the key is physically attached to the user's device. Use the **bring-your-own-session** flow above, or fall back to a non-hardware factor.
+### 7c. Hardware keys (YubiKey U2F/FIDO2) — not supported
+
+Same constraint as passkeys: the key is physically attached to the user's device. Sites should fall back to a non-hardware factor; if they don't, sign in on your own browser, export cookies / `storageState`, then apply via **`POST /sessions/:id/session-snapshot`**.
 
 ---
 

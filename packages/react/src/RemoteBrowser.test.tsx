@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RemoteBrowser } from "./index.js";
 
@@ -125,7 +125,7 @@ describe("RemoteBrowser", () => {
     expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
   });
 
-  it("opens passkey modal and dismisses on 'Use another method'", async () => {
+  it("shows a non-blocking passkey toast on webauthn_required", async () => {
     render(
       <RemoteBrowser
         sessionId="sid"
@@ -148,64 +148,23 @@ describe("RemoteBrowser", () => {
       });
     });
 
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog).toBeInTheDocument();
-    expect(screen.getByText(/Passkey requested by google\.com/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Use another method/ }));
-
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    });
-
-    const sent = FakeWebSocket.last!.sent.map((s) => JSON.parse(s));
-    expect(sent).toContainEqual({ t: "webauthn_decision", id: "req-1", decision: "dismiss" });
+    const toast = await screen.findByRole("status");
+    expect(toast).toHaveTextContent(/Passkeys aren.t available/);
+    expect(toast).toHaveTextContent(/google\.com asked for a passkey/);
+    /** No buttons, no dialog — purely informational. */
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Sign in/ })).not.toBeInTheDocument();
   });
 
-  it("'Sign in on my browser' opens the rpId in a new tab and dismisses", async () => {
-    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+  it("notifies onWebAuthnRequest and stays silent when webauthnNotice={false}", async () => {
+    const seen: string[] = [];
     render(
       <RemoteBrowser
         sessionId="sid"
         viewerToken="tok"
         wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
-      />,
-    );
-
-    await waitFor(() => {
-      expect(FakeWebSocket.last).not.toBeNull();
-    });
-
-    act(() => {
-      FakeWebSocket.last!.emitMessage({
-        t: "webauthn_required",
-        id: "byo-1",
-        ceremony: "get",
-        rpId: "google.com",
-        origin: "https://accounts.google.com",
-      });
-    });
-
-    await screen.findByRole("dialog");
-    fireEvent.click(screen.getByRole("button", { name: /Sign in on my browser/ }));
-
-    expect(openSpy).toHaveBeenCalledWith(
-      "https://accounts.google.com",
-      "_blank",
-      "noopener,noreferrer",
-    );
-    const sent = FakeWebSocket.last!.sent.map((s) => JSON.parse(s));
-    expect(sent).toContainEqual({ t: "webauthn_decision", id: "byo-1", decision: "dismiss" });
-    openSpy.mockRestore();
-  });
-
-  it("auto-dismisses (does not skip) when webauthnPrompt={false}", async () => {
-    render(
-      <RemoteBrowser
-        sessionId="sid"
-        viewerToken="tok"
-        wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
-        webauthnPrompt={false}
+        webauthnNotice={false}
+        onWebAuthnRequest={(req) => seen.push(req.rpId ?? "")}
       />,
     );
 
@@ -223,14 +182,10 @@ describe("RemoteBrowser", () => {
     });
 
     await waitFor(() => {
-      const sent = FakeWebSocket.last!.sent.map((s) => JSON.parse(s));
-      expect(sent).toContainEqual({
-        t: "webauthn_decision",
-        id: "auto-1",
-        decision: "dismiss",
-      });
+      expect(seen).toContain("x.com");
     });
 
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

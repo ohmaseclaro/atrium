@@ -83,6 +83,12 @@ export function stealthLaunchOptions(
       "--disable-infobars",
       "--no-first-run",
       "--no-default-browser-check",
+      /**
+       * Disable cross-device passkey UI features so sites that probe for them
+       * fall back to password / OTP without ever showing native dialogs the
+       * remote viewer can't see. Belt-and-suspenders to the per-page init script.
+       */
+      "--disable-features=WebAuthenticationCableLinking,WebAuthenticationConditionalUI,WebAuthenticationCableServer,DigitalAssetLinks",
     ],
   };
   if (

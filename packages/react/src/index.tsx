@@ -70,21 +70,16 @@ export type RemoteBrowserProps = {
    */
   showSessionStatus?: boolean;
   /**
-   * When the remote page invokes `navigator.credentials.{get,create}` with a `publicKey`
-   * (passkey / WebAuthn), the viewer prompts the user.
-   * - `true` (default) — show built-in modal: "Sign in on my browser" / "Use another method".
-   * - `false` — auto-dismiss every passkey request (the page rejects with `NotAllowedError`
-   *   so the site can fall back to password / OTP); use this when you've already wired
-   *   `onWebAuthnRequest` to a custom UI.
+   * Passkeys / WebAuthn are **not supported** in remote browsers — the worker pre-empts
+   * sites by reporting "no platform authenticator" and any direct call to
+   * `navigator.credentials.{get,create}` with a `publicKey` is auto-rejected with
+   * `NotAllowedError` so the site falls back to password / OTP.
    *
-   * **Why not "Continue"?** Chromium's passkey UI (incl. the cross-device QR window) is a
-   * native OS dialog rendered outside the page; the screencast can't capture it, so on a
-   * worker host the user would never see it. Atrium's honest path is to either skip the
-   * passkey or sign in on the user's own browser and bring the session back via
-   * `POST /sessions/:id/session-snapshot`.
+   * - `true` (default) — show a brief, non-blocking **toast** when a site still tries.
+   * - `false` — fully silent (no toast). Pair with `onWebAuthnRequest` for custom UX.
    */
-  webauthnPrompt?: boolean;
-  /** Notified whenever a passkey ceremony is requested (for telemetry / custom UX). */
+  webauthnNotice?: boolean;
+  /** Notified whenever a site attempts a passkey ceremony (for telemetry / custom UX). */
   onWebAuthnRequest?: (req: WebAuthnRequest) => void;
   onControlChange?: (holder: ControlHolder) => void;
   onTerminated?: (reason: string) => void;
@@ -100,7 +95,7 @@ function sendWs(ws: WebSocket, obj: unknown): void {
  */
 export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
   const interactive = props.interactive ?? false;
-  const webauthnPrompt = props.webauthnPrompt ?? true;
+  const webauthnNotice = props.webauthnNotice ?? true;
   const resolvedChrome = useMemo(() => resolveRemoteBrowserChrome(props.chrome), [props.chrome]);
   const showSessionStatus =
     props.showSessionStatus ??
@@ -117,7 +112,8 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
   const [tabs, setTabs] = useState<RemoteBrowserTab[]>([]);
   const [activeUrl, setActiveUrl] = useState("");
   const [activeTitle, setActiveTitle] = useState("");
-  const [webauthnRequest, setWebauthnRequest] = useState<WebAuthnRequest | null>(null);
+  const [webauthnToast, setWebauthnToast] = useState<WebAuthnRequest | null>(null);
+  const webauthnToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     onControlChangeRef.current = props.onControlChange;
@@ -136,11 +132,18 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
     setTabs([]);
     setActiveUrl("");
     setActiveTitle("");
-    setWebauthnRequest(null);
+    setWebauthnToast(null);
+    if (webauthnToastTimerRef.current) {
+      clearTimeout(webauthnToastTimerRef.current);
+      webauthnToastTimerRef.current = null;
+    }
     /** Reassigning `width` clears the canvas per HTML spec, without needing a 2D context
      *  (which jsdom doesn't implement, keeping unit tests quiet). */
     const canvas = canvasRef.current;
-    if (canvas) canvas.width = canvas.width;
+    if (canvas) {
+      // eslint-disable-next-line no-self-assign
+      canvas.width = canvas.width;
+    }
     const ws = new WebSocket(url.toString());
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
@@ -173,13 +176,17 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
               origin: msg.origin,
             };
             onWebAuthnRequestRef.current?.(req);
-            if (webauthnPrompt) {
-              setWebauthnRequest(req);
-            } else {
-              /** Auto-dismiss: passkey UI is invisible from a remote browser, so the safe
-               *  default is to let the site fall back. Apps wanting custom flows pair
-               *  `webauthnPrompt={false}` with `onWebAuthnRequest`. */
-              sendWs(ws, { t: "webauthn_decision", id: msg.id, decision: "dismiss" });
+            /** The page-side init script throws `NotAllowedError` immediately, so this
+             *  is purely informational. We show a non-blocking toast and auto-clear. */
+            if (webauthnNotice) {
+              setWebauthnToast(req);
+              if (webauthnToastTimerRef.current) {
+                clearTimeout(webauthnToastTimerRef.current);
+              }
+              webauthnToastTimerRef.current = setTimeout(() => {
+                setWebauthnToast(null);
+                webauthnToastTimerRef.current = null;
+              }, 6000);
             }
           }
           if (msg.t === "navigate") {
@@ -218,7 +225,7 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
     ws.addEventListener("close", () => {
       setStatus((s) => (s === "ended" ? s : "ended"));
     });
-  }, [props.viewerToken, props.wsUrl, webauthnPrompt]);
+  }, [props.viewerToken, props.wsUrl, webauthnNotice]);
 
   useEffect(() => {
     connect();
@@ -591,37 +598,14 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
       </div>
     ) : null;
 
-  const decideWebAuthn = (decision: "proceed" | "dismiss"): void => {
-    const ws = wsRef.current;
-    const req = webauthnRequest;
-    if (!req) return;
-    if (ws) sendWs(ws, { t: "webauthn_decision", id: req.id, decision });
-    setWebauthnRequest(null);
-  };
-
-  const openInMyBrowser = (): void => {
-    const target =
-      webauthnRequest?.origin ||
-      (webauthnRequest?.rpId ? `https://${webauthnRequest.rpId}/` : null) ||
-      activeUrl;
-    if (target && typeof window !== "undefined") {
+  const webauthnToastLabel = (() => {
+    if (!webauthnToast) return "";
+    if (webauthnToast.rpId) return webauthnToast.rpId;
+    if (webauthnToast.origin) {
       try {
-        window.open(target, "_blank", "noopener,noreferrer");
+        return new URL(webauthnToast.origin).hostname;
       } catch {
-        /* popup blocked — user can copy/paste the URL */
-      }
-    }
-    decideWebAuthn("dismiss");
-  };
-
-  const webauthnRpLabel = (() => {
-    if (!webauthnRequest) return "";
-    if (webauthnRequest.rpId) return webauthnRequest.rpId;
-    if (webauthnRequest.origin) {
-      try {
-        return new URL(webauthnRequest.origin).hostname;
-      } catch {
-        return webauthnRequest.origin;
+        return webauthnToast.origin;
       }
     }
     return "this site";
@@ -657,89 +641,33 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
           {streamStage}
         </div>
       )}
-      {webauthnRequest ? (
+      {webauthnToast ? (
         <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="atrium-webauthn-title"
+          role="status"
+          aria-live="polite"
           style={{
             position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
+            top: 16,
+            right: 16,
+            maxWidth: 360,
+            background: "#1f2937",
+            color: "#f9fafb",
+            borderRadius: 10,
+            boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+            padding: "10px 14px",
+            fontSize: 13,
+            lineHeight: 1.4,
             fontFamily: 'system-ui, "Segoe UI", Roboto, sans-serif',
+            zIndex: 1000,
           }}
         >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 12,
-              padding: "20px 22px",
-              maxWidth: 460,
-              width: "calc(100% - 32px)",
-              boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
-              color: "#1f2937",
-            }}
-          >
-            <h2 id="atrium-webauthn-title" style={{ margin: "0 0 8px", fontSize: 18 }}>
-              Passkey requested by {webauthnRpLabel}
-            </h2>
-            <p style={{ margin: "0 0 10px", fontSize: 13, lineHeight: 1.5, color: "#374151" }}>
-              {webauthnRequest.ceremony === "create"
-                ? "This site wants to register a passkey, "
-                : "This site wants to sign in with a passkey, "}
-              but passkeys are stored on your local device and can&rsquo;t be used inside this
-              remote browser.
-            </p>
-            <p style={{ margin: "0 0 16px", fontSize: 13, lineHeight: 1.5, color: "#374151" }}>
-              You can <strong>sign in on your own browser</strong> (your passkey works there as
-              normal) and bring the resulting session back, or pick a{" "}
-              <strong>different sign-in method</strong> on the remote site.
-            </p>
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                justifyContent: "flex-end",
-                flexWrap: "wrap",
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => decideWebAuthn("dismiss")}
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  border: "1px solid #d1d5db",
-                  background: "#fff",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  color: "#374151",
-                }}
-              >
-                Use another method
-              </button>
-              <button
-                type="button"
-                onClick={openInMyBrowser}
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  border: "1px solid #1d4ed8",
-                  background: "#2563eb",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  color: "#fff",
-                  fontWeight: 600,
-                }}
-              >
-                Sign in on my browser →
-              </button>
-            </div>
-          </div>
+          <strong style={{ display: "block", fontSize: 13, marginBottom: 2 }}>
+            Passkeys aren&rsquo;t available
+          </strong>
+          <span style={{ color: "#d1d5db" }}>
+            {webauthnToastLabel} asked for a passkey. Pick a different sign-in option on the page
+            (e.g. password, code).
+          </span>
         </div>
       ) : null}
     </div>
