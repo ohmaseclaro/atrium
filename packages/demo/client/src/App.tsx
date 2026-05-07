@@ -200,7 +200,8 @@ export function App(): JSX.Element {
           borderRadius: 20,
           padding: 28,
           boxSizing: "border-box",
-          background: "linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)",
+          background:
+            "linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)",
           border: "1px solid rgba(255,255,255,0.12)",
           boxShadow: "0 24px 80px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)",
           backdropFilter: "blur(12px)",

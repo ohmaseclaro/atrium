@@ -6,13 +6,21 @@
 
 ## Install & run
 
-From the monorepo (after `pnpm build`):
+From npm:
 
 ```bash
+npm install @atrium/worker
+npx playwright install chromium
 export ATRIUM_WORKER_SECRET=your-shared-secret
 export ATRIUM_WORKER_PORT=7070   # optional
-pnpm --filter @atrium/worker start
+npx atrium-worker
 ```
+
+With pnpm: `pnpm add @atrium/worker`, then `pnpm exec atrium-worker`.
+
+From the monorepo (after `pnpm build`), use `pnpm --filter @atrium/worker start`.
+
+Full app walkthrough: [npm quick start](../../docs/quick-start.md).
 
 **Headed** Chromium is the default (better for real sites). On Linux without a display, use **`pnpm run start:xvfb`** or the **Docker** image — [Main README — Docker (worker)](../../README.md#docker-worker).
 

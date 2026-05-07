@@ -1,8 +1,25 @@
 {
   "name": "atrium",
   "private": true,
-  "description": "Remote browser sessions for human-in-the-loop authentication — monorepo",
+  "description": "Open-source remote browser infrastructure for embeddable Chromium sessions",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ohmaseclaro/atrium.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ohmaseclaro/atrium/issues"
+  },
+  "homepage": "https://github.com/ohmaseclaro/atrium#readme",
+  "keywords": [
+    "remote-browser",
+    "browser-automation",
+    "chromium",
+    "playwright",
+    "human-in-the-loop",
+    "websocket",
+    "react"
+  ],
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=20"
@@ -17,6 +34,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "pnpm -r exec rm -rf dist",
+    "pack:check": "rm -rf .packs && mkdir -p .packs && pnpm --dir packages/protocol pack --pack-destination ../../.packs && pnpm --dir packages/server pack --pack-destination ../../.packs && pnpm --dir packages/react pack --pack-destination ../../.packs && pnpm --dir packages/worker pack --pack-destination ../../.packs && pnpm --dir packages/cli pack --pack-destination ../../.packs",
+    "publish:check": "pnpm build && pnpm test && pnpm pack:check",
     "demo": "pnpm --filter @atrium/demo dev"
   },
   "devDependencies": {

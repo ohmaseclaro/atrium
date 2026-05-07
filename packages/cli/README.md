@@ -8,7 +8,18 @@ Lightweight **CLI** entrypoint for the Atrium monorepo (`atrium` on your `PATH` 
 
 - **`atrium doctor`** — sanity checks for local development (expand as the repo grows).
 
-## Run (from monorepo root)
+## Install & run
+
+From npm:
+
+```bash
+npm install --save-dev @atrium/cli
+npx atrium doctor
+```
+
+With pnpm: `pnpm add -D @atrium/cli`, then `pnpm exec atrium doctor`.
+
+From the monorepo root:
 
 ```bash
 pnpm --filter @atrium/cli exec atrium doctor

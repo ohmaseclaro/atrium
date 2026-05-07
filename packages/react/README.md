@@ -7,10 +7,14 @@ React **viewer** for Atrium remote browser sessions: WebSocket connection to you
 ## Install
 
 ```bash
-pnpm add @atrium/react @atrium/protocol
+npm install @atrium/react react
 ```
 
-(`@atrium/protocol` is a peer-style dependency for types; it is already listed as a dependency of this package.)
+With pnpm: `pnpm add @atrium/react react`.
+
+`@atrium/protocol` is installed automatically as a runtime dependency for message parsing and exported types.
+
+Full app walkthrough: [npm quick start](../../docs/quick-start.md).
 
 ## Usage
 
@@ -37,6 +41,8 @@ import { RemoteBrowser } from "@atrium/react";
 | **`wsUrl`**             | `string`                     | Absolute `ws:` / `wss:` URL from `POST /sessions`.                                                                                     |
 | **`interactive`**       | `boolean`                    | When `true` and control is **`human`**, forwards pointer, wheel, and keyboard events from the canvas.                                  |
 | **`chrome`**            | `RemoteBrowserChromeOptions` | Optional UI around the canvas (see below). Default: **`none`**.                                                                        |
+| **`fullScreen`**        | `boolean`                    | Stretch to fill a fullscreen parent and render an **Exit full screen** bar.                                                            |
+| **`onExitFullScreen`**  | `() => void`                 | Called after the viewer exit button asks the document to leave fullscreen. Use for app cleanup.                                        |
 | **`showSessionStatus`** | `boolean`                    | Session / control status line. Default: **`true`** if no chrome; **`false`** if any chrome region is on (set explicitly to show both). |
 | **`onControlChange`**   | `(holder) => void`           | `agent` \| `human` \| `idle`.                                                                                                          |
 | **`onTerminated`**      | `(reason) => void`           | Session ended.                                                                                                                         |

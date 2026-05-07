@@ -2,7 +2,7 @@
 
 Minimal **Express** server that mounts **`@atrium/server`** only (no bundled React UI). Defaults match the root [`README.md`](../../README.md).
 
-**Read next:** [User guide — Embed the API](../../docs/user-guide.md#3-embed-the-api-atriumserver) · [Documentation hub](../../docs/README.md)
+**Read next:** [npm quick start](../../docs/quick-start.md) · [User guide — Embed the API](../../docs/user-guide.md#3-embed-the-api-atriumserver) · [Documentation hub](../../docs/README.md)
 
 ## When to use this
 
@@ -17,7 +17,6 @@ pnpm demo
 
 ## Prerequisites
 
-- **Redis** at `REDIS_URL` (default `redis://127.0.0.1:6379`) — required by `@atrium/server` in this example.
 - **Worker** listening on `ATRIUM_WORKER_DIAL_BASE` with matching `ATRIUM_WORKER_SECRET`.
 
 ## Run this example
@@ -27,10 +26,7 @@ pnpm demo
 export ATRIUM_WORKER_SECRET=dev-secret-change-me
 pnpm --filter @atrium/worker start
 
-# Terminal B — Redis (if not already running)
-# redis-server
-
-# Terminal C — API host
+# Terminal B — API host
 export ATRIUM_WORKER_SECRET=dev-secret-change-me
 export ATRIUM_WORKER_DIAL_BASE=ws://127.0.0.1:7070
 pnpm --filter @atrium/example-express-host dev

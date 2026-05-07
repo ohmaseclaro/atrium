@@ -29,11 +29,11 @@ pnpm build
 pnpm demo
 ```
 
-Then open [http://127.0.0.1:3333](http://127.0.0.1:3333), click **POST /atrium/sessions**, and confirm the canvas shows **example.com** (worker navigates there by default).
+Then open [http://127.0.0.1:3333](http://127.0.0.1:3333), edit the tweet if you want, and click **Login and post**. The demo opens X in a fullscreen remote browser, hands control to you for login, then snapshots the session and posts while you watch.
 
-### X (Twitter) workflow block
+### X (Twitter) workflow
 
-The demo UI includes **Start X login flow** (bootstraps `https://x.com/i/flow/login`), **Grant control** so you can drive the remote canvas (click to focus, then type), **GET session snapshot** to export cookies + Playwright `storageState`, **Return control**, and **POST x-demo compose tweet** to open compose and post via automation. Reliability depends on X. The worker is **headed by default**; optionally use the system **Chrome** channel:
+The demo UI has one primary button: **Login and post**. It bootstraps `https://x.com/i/flow/login`, grants human control automatically, keeps a floating **I'm logged in — post my tweet** button visible, then exports cookies + Playwright `storageState`, returns control to automation, and calls the X compose example endpoint. Reliability depends on X. The worker is **headed by default**; optionally use the system **Chrome** channel:
 
 ```bash
 ATRIUM_CHROMIUM_CHANNEL=chrome pnpm --filter @atrium/worker start

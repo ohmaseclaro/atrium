@@ -3,7 +3,25 @@
   "version": "0.1.0",
   "description": "Express-compatible middleware for Atrium remote browser sessions (API dials workers)",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ohmaseclaro/atrium.git",
+    "directory": "packages/server"
+  },
+  "bugs": {
+    "url": "https://github.com/ohmaseclaro/atrium/issues"
+  },
+  "homepage": "https://github.com/ohmaseclaro/atrium/tree/main/packages/server#readme",
+  "keywords": [
+    "atrium",
+    "remote-browser",
+    "express",
+    "browser-automation",
+    "websocket",
+    "playwright"
+  ],
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -14,8 +32,15 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "pnpm run typecheck",
@@ -23,7 +48,6 @@
   },
   "dependencies": {
     "@atrium/protocol": "workspace:*",
-    "express": "^4.21.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -31,6 +55,7 @@
     "@types/node": "^22.10.2",
     "@types/supertest": "^6.0.2",
     "@types/ws": "^8.5.13",
+    "express": "^4.21.2",
     "supertest": "^7.0.0",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"

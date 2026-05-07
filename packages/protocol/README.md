@@ -7,8 +7,12 @@ Shared **Zod** schemas and **TypeScript** types for Atrium **WebSocket JSON** me
 ## Install
 
 ```bash
-pnpm add @atrium/protocol
+npm install @atrium/protocol
 ```
+
+With pnpm: `pnpm add @atrium/protocol`.
+
+Most applications do not need to install this directly; `@atrium/server`, `@atrium/react`, and `@atrium/worker` depend on it automatically. Install it directly when you want to validate wire messages or bootstrap payloads yourself.
 
 ## Usage
 

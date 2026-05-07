@@ -8,9 +8,11 @@ This repository is a **pnpm monorepo** (`packages/*`) implementing the architect
 
 | Resource                                              | What it is                                                                                                                      |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [**npm quick start**](docs/quick-start.md)            | Install from npm, start the worker, mount the server API, render `<RemoteBrowser />`, snapshot sessions.                        |
 | [**User guide**](docs/user-guide.md)                  | **How to ship**: install, demo, embed `@atrium/server` + `@atrium/react`, multi-tab behavior, HTTP routes, snapshots, security. |
 | [**Documentation hub**](docs/README.md)               | Index linking **every package README**, examples, design doc, and sprint artifacts.                                             |
 | [**Technical design**](docs/remote-browser-design.md) | Architecture, wire protocol, deployment narrative.                                                                              |
+| [**npm publishing**](docs/npm-publishing.md)          | Package split, prepublish checks, tarball inspection, and publish order for `@atrium/*`.                                        |
 | [**Sprint artifacts**](docs/artifacts/README.md)      | Spec, progress, [`sprint-bundle.json`](docs/artifacts/sprint-bundle.json), per-sprint contracts.                                |
 
 ### For integrators
@@ -21,7 +23,27 @@ This repository is a **pnpm monorepo** (`packages/*`) implementing the architect
 - **TLS client certificates (mTLS)** — upload a PEM or PFX bundle on `POST /sessions` (`clientCertificates`) and Chromium presents it to the matching origin.
 - **Passkey-aware viewer** — passkeys are **not supported** in remote browsers (WebAuthn is unrelayable by design). The worker disguises Chromium as a device without a platform authenticator so most sites never offer the passkey button; if a site insists, the call rejects with `NotAllowedError` (falls back to password / OTP) and `<RemoteBrowser />` shows a 6s toast. Details: [user guide §7](docs/user-guide.md#7-authentication-with-certificates-passkeys-and-hardware-keys).
 
-## Try the full demo first
+## Quick start from npm
+
+Install the core packages into your app:
+
+```bash
+npm install express @atrium/server @atrium/react @atrium/worker
+npm install react react-dom
+npx playwright install chromium
+```
+
+Start the Chromium worker:
+
+```bash
+ATRIUM_WORKER_SECRET=replace-me npx atrium-worker
+```
+
+Then mount `@atrium/server` in your Express app and render `@atrium/react`'s `<RemoteBrowser />` with the session payload returned by `POST /atrium/sessions`.
+
+Full walkthrough: [npm quick start](docs/quick-start.md).
+
+## Try the full demo locally
 
 The **`@atrium/demo`** package runs the worker and a Vite + React UI on **http://127.0.0.1:3333** using the same defaults as production-style configs in code (`ATRIUM_WORKER_SECRET`, `ATRIUM_WORKER_DIAL_BASE`). See [`packages/demo/README.md`](packages/demo/README.md).
 
@@ -32,11 +54,23 @@ pnpm exec playwright install chromium   # once per machine
 pnpm demo
 ```
 
-Open the app, click **POST /atrium/sessions**, and confirm the remote canvas shows **example.com** (the worker navigates there by default).
+Open the app, edit the tweet if you want, then click **Login and post**. The demo opens X in a fullscreen remote browser, hands control to you for login, then resumes automation in the same session.
+
+## Installable packages
+
+The demo is private, but the core pieces publish as public npm packages:
+
+```bash
+npm install express @atrium/server @atrium/react @atrium/worker
+```
+
+`@atrium/protocol` is a shared dependency for schemas and wire types. `@atrium/worker` also exposes the `atrium-worker` binary for running the Chromium worker from an installed package.
+
+Release checklist: [`docs/npm-publishing.md`](docs/npm-publishing.md).
 
 ## Session snapshots (cookies + `storageState`)
 
-Step-by-step context: [**User guide — Session snapshots**](docs/user-guide.md#7-session-snapshots).
+Step-by-step context: [**User guide — Session snapshots**](docs/user-guide.md#8-session-snapshots).
 
 Use a **single JSON blob** to move state between machines or to seed a new session.
 

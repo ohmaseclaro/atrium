@@ -1,14 +1,20 @@
 # @atrium/server
 
-Express **middleware** for Atrium: **session HTTP API**, **viewer WebSocket relay** (your API **dials** the worker), Redis-backed session records, and replay of recent JSON control messages for reconnects.
+Express **middleware** for Atrium: **session HTTP API**, **viewer WebSocket relay** (your API **dials** the worker), in-memory session records, and replay of recent JSON control messages for reconnects.
 
 **Docs hub:** [`docs/README.md`](../../docs/README.md) · **User guide:** [`docs/user-guide.md`](../../docs/user-guide.md)
 
 ## Install
 
 ```bash
-pnpm add @atrium/server @atrium/protocol
+npm install express @atrium/server
 ```
+
+`express` is a peer dependency because Atrium mounts into your existing Express app.
+
+With pnpm: `pnpm add express @atrium/server`.
+
+Full app walkthrough: [npm quick start](../../docs/quick-start.md).
 
 ## API
 
@@ -42,7 +48,7 @@ Summarized in [User guide — HTTP endpoints](../../docs/user-guide.md#6-http-en
 
 ## Example
 
-[`examples/express-host`](../../examples/express-host/README.md) — minimal host with `authorize` stub and Redis URL.
+[`examples/express-host`](../../examples/express-host/README.md) — minimal host with an `authorize` stub and worker dial settings.
 
 ## Build
 

@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { startWorkerServer } from "./index.js";
 
 const port = Number(process.env.ATRIUM_WORKER_PORT ?? "7070");

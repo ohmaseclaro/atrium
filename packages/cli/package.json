@@ -3,14 +3,37 @@
   "version": "0.1.0",
   "description": "Developer utilities for the Atrium monorepo (placeholders for local stack helpers)",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ohmaseclaro/atrium.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/ohmaseclaro/atrium/issues"
+  },
+  "homepage": "https://github.com/ohmaseclaro/atrium/tree/main/packages/cli#readme",
+  "keywords": [
+    "atrium",
+    "remote-browser",
+    "cli",
+    "chromium",
+    "playwright"
+  ],
   "type": "module",
   "bin": {
     "atrium": "./dist/index.js"
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "pnpm run typecheck",

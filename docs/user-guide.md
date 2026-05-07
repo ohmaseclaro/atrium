@@ -2,11 +2,23 @@
 
 **Atrium** gives you a **real Chromium session** in your infrastructure, a **viewer** your users can interact with when they need to sign in (OAuth, MFA, captchas), and **HTTP APIs** to move **cookies** and Playwright **`storageState`** back into your automation.
 
-This guide matches the **current** open-source monorepo. For deeper architecture, see [Technical design](./remote-browser-design.md).
+This guide matches the **current** open-source monorepo. If you are installing Atrium into an app from npm, start with the [npm quick start](./quick-start.md). For deeper architecture, see [Technical design](./remote-browser-design.md).
 
 ---
 
 ## 1. Try it in five minutes
+
+### From npm
+
+Use the [npm quick start](./quick-start.md) to install the public packages, run `npx atrium-worker`, mount `@atrium/server`, render `@atrium/react`, and export a session snapshot.
+
+```bash
+npm install express @atrium/server @atrium/react @atrium/worker
+npm install react react-dom
+npx playwright install chromium
+```
+
+### From the monorepo demo
 
 From the repository root:
 
@@ -17,7 +29,7 @@ pnpm exec playwright install chromium   # once per machine
 pnpm demo
 ```
 
-Open **http://127.0.0.1:3333**, create a session, and confirm the remote browser loads (default **example.com**). The demo uses **embedded browser chrome** (`chrome="full"`) so tabs, URL bar, and navigation match a familiar browser window.
+Open **http://127.0.0.1:3333**, edit the tweet if you want, then click **Login and post**. The demo opens X in a fullscreen remote browser, hands control to you for login, then resumes automation in the same live session.
 
 Details: [`packages/demo/README.md`](../packages/demo/README.md).
 
@@ -40,8 +52,8 @@ Package-specific READMEs: [`docs/README.md`](./README.md).
 
 ## 3. Embed the API (`@atrium/server`)
 
-1. Install: `pnpm add @atrium/server` (from npm when published, or `workspace:*` inside this repo).
-2. Call **`atrium(config)`** with `authorize`, `policies`, **`workerDialBase`**, **`workerSharedSecret`**, and **`redis.url`** (session metadata and relay).
+1. Install: `npm install express @atrium/server` (or `pnpm add express @atrium/server`).
+2. Call **`atrium(config)`** with `authorize`, `policies`, **`workerDialBase`**, **`workerSharedSecret`**, and the required config fields shown below.
 3. Mount **`router`** on your Express app (e.g. `app.use("/atrium", router)`).
 4. On your **`http.Server`**, handle **`upgrade`** and delegate matching paths to **`handleViewerUpgrade`**.
 
@@ -90,7 +102,16 @@ The API opens an **outbound** WebSocket to
 `${ATRIUM_WORKER_DIAL_BASE}/internal/stream/:sessionId`  
 with **`Authorization: Bearer`** `ATRIUM_WORKER_SECRET`.
 
-Run locally after `pnpm build`:
+Install and run from npm:
+
+```bash
+npm install @atrium/worker
+npx playwright install chromium
+export ATRIUM_WORKER_SECRET=dev-secret-change-me
+npx atrium-worker
+```
+
+Run locally from the monorepo after `pnpm build`:
 
 ```bash
 export ATRIUM_WORKER_SECRET=dev-secret-change-me

@@ -4,8 +4,10 @@ Start here, then jump into the topic you need.
 
 | Document                                           | Audience                  | What you get                                                                                                                                                        |
 | -------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [**npm quick start**](./quick-start.md)            | App developers            | Install public packages, start the worker, mount the server API, embed `<RemoteBrowser />`, snapshot a session.                                                     |
 | [**User guide**](./user-guide.md)                  | Anyone shipping a feature | Install, run the demo, embed the API and React viewer, multi-tab behavior, snapshots, security, links to examples.                                                  |
 | [**Technical design**](./remote-browser-design.md) | Implementers & reviewers  | Architecture, wire protocol narrative, scaling notes (some sections describe the long-term target; the [user guide](./user-guide.md) reflects what is wired today). |
+| [**npm publishing**](./npm-publishing.md)          | Maintainers               | Public package list, prepublish checks, tarball inspection, versioning, and publish order.                                                                          |
 | [**Sprint artifacts**](./artifacts/README.md)      | PM / eng planning         | `sprint-bundle.json`, spec, progress, per-sprint contracts.                                                                                                         |
 | [**Main README**](../README.md)                    | Everyone                  | Monorepo map, env defaults, Docker worker, session snapshots, lint/test commands.                                                                                   |
 
