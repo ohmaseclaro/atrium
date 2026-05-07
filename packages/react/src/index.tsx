@@ -129,6 +129,18 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
     const url = new URL(props.wsUrl);
     url.searchParams.set("token", props.viewerToken);
     setStatus("connecting");
+    /** Reset stream state so the canvas / chrome / aspect-ratio stage don't display stale
+     *  frames or tabs from a previous session while the new one is bootstrapping. */
+    setHolder("agent");
+    setViewport({ w: 1280, h: 800 });
+    setTabs([]);
+    setActiveUrl("");
+    setActiveTitle("");
+    setWebauthnRequest(null);
+    /** Reassigning `width` clears the canvas per HTML spec, without needing a 2D context
+     *  (which jsdom doesn't implement, keeping unit tests quiet). */
+    const canvas = canvasRef.current;
+    if (canvas) canvas.width = canvas.width;
     const ws = new WebSocket(url.toString());
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
