@@ -173,20 +173,42 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
     const ws = wsRef.current;
     if (!canvas || !ws) return;
 
-    const toViewport = (clientX: number, clientY: number): { x: number; y: number } => {
+    /**
+     * Map screen coordinates to Playwright viewport pixels. Accounts for
+     * `object-fit: contain` letterboxing and for JPEG dimensions that may differ
+     * from `hello.viewport` while sharing the same aspect ratio.
+     */
+    const clientToViewport = (
+      clientX: number,
+      clientY: number,
+    ): { x: number; y: number } | null => {
+      const iw = canvas.width;
+      const ih = canvas.height;
+      if (iw <= 1 || ih <= 1) return null;
+
       const rect = canvas.getBoundingClientRect();
-      const x = ((clientX - rect.left) / Math.max(rect.width, 1)) * viewport.w;
-      const y = ((clientY - rect.top) / Math.max(rect.height, 1)) * viewport.h;
-      return { x, y };
+      const cw = Math.max(rect.width, 1);
+      const ch = Math.max(rect.height, 1);
+      const scale = Math.min(cw / iw, ch / ih);
+      const dispW = iw * scale;
+      const dispH = ih * scale;
+      const offX = rect.left + (cw - dispW) / 2;
+      const offY = rect.top + (ch - dispH) / 2;
+      const lx = clientX - offX;
+      const ly = clientY - offY;
+      const nx = Math.min(1, Math.max(0, lx / dispW));
+      const ny = Math.min(1, Math.max(0, ly / dispH));
+      return { x: nx * viewport.w, y: ny * viewport.h };
     };
 
     const sendMouse = (type: string, ev: PointerEvent): void => {
       if (ws.readyState !== WebSocket.OPEN) return;
-      const { x, y } = toViewport(ev.clientX, ev.clientY);
+      const mapped = clientToViewport(ev.clientX, ev.clientY);
+      if (!mapped) return;
       sendWs(ws, {
         t: "input",
         kind: "mouse",
-        payload: { type, x, y, button: ev.button },
+        payload: { type, x: mapped.x, y: mapped.y, button: ev.button },
       });
     };
 
@@ -298,10 +320,56 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
         border: "1px solid #c4c7cc",
         boxShadow: "0 1px 3px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06)",
         maxWidth: 1280,
+        width: "100%",
+        marginLeft: "auto",
+        marginRight: "auto",
         background: "#dee1e6",
         fontFamily: 'system-ui, "Segoe UI", Roboto, sans-serif',
       }
     : undefined;
+
+  /** Letterboxed stage: matches session viewport aspect ratio, centered, max width capped. */
+  const streamStage = (
+    <div
+      style={{
+        width: "100%",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        background: "#0b0d12",
+      }}
+    >
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          maxWidth: "100%",
+          aspectRatio: `${viewport.w} / ${viewport.h}`,
+          margin: "0 auto",
+        }}
+      >
+        <canvas
+          ref={canvasRef}
+          tabIndex={interactive ? 0 : -1}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: "100%",
+            height: "100%",
+            display: "block",
+            objectFit: "contain",
+            border: anyChrome ? "none" : "1px solid #e5e7eb",
+            borderRadius: anyChrome ? 0 : 8,
+            background: "#0b0d12",
+            outline: interactive && holder === "human" ? "2px solid #34d399" : undefined,
+            touchAction: "none",
+            userSelect: "none",
+          }}
+        />
+      </div>
+    </div>
+  );
 
   const toolbarRow =
     resolvedChrome.showToolbar || resolvedChrome.showUrlBar ? (
@@ -463,24 +531,8 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
       </div>
     ) : null;
 
-  const canvasNode = (
-    <canvas
-      ref={canvasRef}
-      tabIndex={interactive ? 0 : -1}
-      style={{
-        width: "100%",
-        display: "block",
-        maxWidth: anyChrome ? undefined : 1280,
-        border: anyChrome ? "none" : "1px solid #e5e7eb",
-        borderRadius: anyChrome ? 0 : 8,
-        background: "#0b0d12",
-        outline: interactive && holder === "human" ? "2px solid #34d399" : undefined,
-      }}
-    />
-  );
-
   return (
-    <div style={props.style}>
+    <div style={{ width: "100%", ...props.style }}>
       {showSessionStatus ? (
         <div
           style={{
@@ -502,10 +554,12 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
         <div style={chromeShell}>
           {tabStrip}
           {toolbarRow}
-          {canvasNode}
+          {streamStage}
         </div>
       ) : (
-        canvasNode
+        <div style={{ width: "100%", maxWidth: 1280, marginLeft: "auto", marginRight: "auto" }}>
+          {streamStage}
+        </div>
       )}
     </div>
   );

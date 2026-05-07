@@ -68,6 +68,10 @@ import { resolveRemoteBrowserChrome } from "@atrium/react";
 const flags = resolveRemoteBrowserChrome("minimal");
 ```
 
+### Pointer coordinates
+
+The live JPEG may be **letterboxed** inside the viewer (`object-fit: contain`) while the session keeps a fixed **viewport** aspect ratio from `hello`. Pointer events are mapped through the **visible image** rectangle so clicks line up with Playwright `page.mouse` coordinates.
+
 ### Wire messages handled
 
 JSON frames are parsed with **`parseServerMessage`** from **`@atrium/protocol`**. The component updates UI from:
