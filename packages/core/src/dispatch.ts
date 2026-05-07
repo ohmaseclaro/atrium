@@ -115,7 +115,7 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
         const detail = await r.text();
         return json(
           { error: "worker_bootstrap_failed", detail: detail.slice(0, 2000) },
-          r.status === 400 ? 400 : 502,
+          r.status === 400 ? 400 : r.status === 503 ? 503 : 502,
         );
       }
     }
