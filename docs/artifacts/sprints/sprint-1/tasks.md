@@ -2,7 +2,7 @@
 
 ### T1: Protocol schemas for wire messages
 
-- **Done when:** Zod schemas cover server and client envelopes used by the skeleton and `pnpm build` for `@atrium/protocol` is clean.
+- **Done when:** Zod schemas cover server and client envelopes used by the skeleton and `pnpm build` for `@ohmaseclaro/atrium-protocol` is clean.
 - **Evidence required:** Vitest `packages/protocol/src/index.test.ts` green.
 - **Dependencies:** (none)
 - **Risk notes:** (none)

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { ControlHolder } from "@atrium/protocol";
+import type { ControlHolder } from "@ohmaseclaro/atrium-protocol";
 import type { Principal } from "./types.js";
 import type { SessionRecord } from "./types.js";
 

@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [react()],
   test: {
-    name: "@atrium/react",
+    name: "@ohmaseclaro/atrium-react",
     environment: "jsdom",
     include: ["src/**/*.test.tsx"],
     globals: true,

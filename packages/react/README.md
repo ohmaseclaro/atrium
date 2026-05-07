@@ -1,4 +1,4 @@
-# @atrium/react
+# @ohmaseclaro/atrium-react
 
 React **viewer** for Atrium remote browser sessions: WebSocket connection to your API relay, **JPEG frames** on a `<canvas>`, and optional **embedded browser chrome** (tabs, URL bar, navigation).
 
@@ -7,19 +7,19 @@ React **viewer** for Atrium remote browser sessions: WebSocket connection to you
 ## Install
 
 ```bash
-npm install @atrium/react react
+npm install @ohmaseclaro/atrium-react react
 ```
 
-With pnpm: `pnpm add @atrium/react react`.
+With pnpm: `pnpm add @ohmaseclaro/atrium-react react`.
 
-`@atrium/protocol` is installed automatically as a runtime dependency for message parsing and exported types.
+`@ohmaseclaro/atrium-protocol` is installed automatically as a runtime dependency for message parsing and exported types.
 
 Full app walkthrough: [npm quick start](../../docs/quick-start.md).
 
 ## Usage
 
 ```tsx
-import { RemoteBrowser } from "@atrium/react";
+import { RemoteBrowser } from "@ohmaseclaro/atrium-react";
 
 <RemoteBrowser
   sessionId={session.sessionId}
@@ -71,7 +71,7 @@ chrome={{
 Omitted flags default to **`false`**. Use the exported helper to match preset logic in your own UI:
 
 ```ts
-import { resolveRemoteBrowserChrome } from "@atrium/react";
+import { resolveRemoteBrowserChrome } from "@ohmaseclaro/atrium-react";
 
 const flags = resolveRemoteBrowserChrome("minimal");
 ```
@@ -91,7 +91,7 @@ The live JPEG may be **letterboxed** inside the viewer (`object-fit: contain`) w
 
 ### Wire messages handled
 
-JSON frames are parsed with **`parseServerMessage`** from **`@atrium/protocol`**. The component updates UI from:
+JSON frames are parsed with **`parseServerMessage`** from **`@ohmaseclaro/atrium-protocol`**. The component updates UI from:
 
 - **`hello`** — viewport, initial control.
 - **`control`** — control holder changes.
@@ -105,7 +105,7 @@ Client messages for chrome actions (when the WebSocket is open):
 ### Build
 
 ```bash
-pnpm --filter @atrium/react run build
+pnpm --filter @ohmaseclaro/atrium-react run build
 ```
 
 MIT — see repository [`LICENSE`](../../LICENSE).

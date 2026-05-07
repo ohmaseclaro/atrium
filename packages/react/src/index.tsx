@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { ControlHolder } from "@atrium/protocol";
-import { parseServerMessage } from "@atrium/protocol";
+import type { ControlHolder } from "@ohmaseclaro/atrium-protocol";
+import { parseServerMessage } from "@ohmaseclaro/atrium-protocol";
 
 export type RemoteBrowserChromeOptions =
   | "none"

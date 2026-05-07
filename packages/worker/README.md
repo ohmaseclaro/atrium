@@ -1,4 +1,4 @@
-# @atrium/worker
+# @ohmaseclaro/atrium-worker
 
 **Chromium worker** for Atrium: accepts an inbound WebSocket from the API (**dial** pattern), runs **Playwright** with optional **stealth** plugins, streams **CDP screencast JPEG** frames to the viewer relay, supports **multiple tabs** per browser context, and exposes internal HTTP for bootstrap, cookies, and `storageState`.
 
@@ -9,16 +9,16 @@
 From npm:
 
 ```bash
-npm install @atrium/worker
+npm install @ohmaseclaro/atrium-worker
 npx playwright install chromium
 export ATRIUM_WORKER_SECRET=your-shared-secret
 export ATRIUM_WORKER_PORT=7070   # optional
 npx atrium-worker
 ```
 
-With pnpm: `pnpm add @atrium/worker`, then `pnpm exec atrium-worker`.
+With pnpm: `pnpm add @ohmaseclaro/atrium-worker`, then `pnpm exec atrium-worker`.
 
-From the monorepo (after `pnpm build`), use `pnpm --filter @atrium/worker start`.
+From the monorepo (after `pnpm build`), use `pnpm --filter @ohmaseclaro/atrium-worker start`.
 
 Full app walkthrough: [npm quick start](../../docs/quick-start.md).
 
@@ -48,7 +48,7 @@ See root [README](../../README.md#docker-worker) for `docker run` example.
 ## Build
 
 ```bash
-pnpm --filter @atrium/worker run build
+pnpm --filter @ohmaseclaro/atrium-worker run build
 ```
 
 MIT — see repository [`LICENSE`](../../LICENSE).

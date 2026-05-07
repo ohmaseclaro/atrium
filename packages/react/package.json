@@ -1,5 +1,5 @@
 {
-  "name": "@atrium/react",
+  "name": "@ohmaseclaro/atrium-react",
   "version": "0.1.0",
   "description": "React UI for embedding Atrium remote browser sessions",
   "license": "MIT",
@@ -47,7 +47,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@atrium/protocol": "workspace:*"
+    "@ohmaseclaro/atrium-protocol": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

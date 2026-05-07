@@ -1,5 +1,5 @@
 {
-  "name": "@atrium/server",
+  "name": "@ohmaseclaro/atrium-server",
   "version": "0.1.0",
   "description": "Express-compatible middleware for Atrium remote browser sessions (API dials workers)",
   "license": "MIT",
@@ -47,7 +47,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@atrium/protocol": "workspace:*",
+    "@ohmaseclaro/atrium-protocol": "workspace:*",
     "ws": "^8.18.0"
   },
   "devDependencies": {

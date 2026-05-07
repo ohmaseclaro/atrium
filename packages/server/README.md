@@ -1,4 +1,4 @@
-# @atrium/server
+# @ohmaseclaro/atrium-server
 
 Express **middleware** for Atrium: **session HTTP API**, **viewer WebSocket relay** (your API **dials** the worker), in-memory session records, and replay of recent JSON control messages for reconnects.
 
@@ -7,19 +7,19 @@ Express **middleware** for Atrium: **session HTTP API**, **viewer WebSocket rela
 ## Install
 
 ```bash
-npm install express @atrium/server
+npm install express @ohmaseclaro/atrium-server
 ```
 
 `express` is a peer dependency because Atrium mounts into your existing Express app.
 
-With pnpm: `pnpm add express @atrium/server`.
+With pnpm: `pnpm add express @ohmaseclaro/atrium-server`.
 
 Full app walkthrough: [npm quick start](../../docs/quick-start.md).
 
 ## API
 
 ```ts
-import { atrium } from "@atrium/server";
+import { atrium } from "@ohmaseclaro/atrium-server";
 
 const { router, handleViewerUpgrade } = atrium({
   redis: { url: process.env.REDIS_URL! },
@@ -53,7 +53,7 @@ Summarized in [User guide — HTTP endpoints](../../docs/user-guide.md#6-http-en
 ## Build
 
 ```bash
-pnpm --filter @atrium/server run build
+pnpm --filter @ohmaseclaro/atrium-server run build
 ```
 
 MIT — see repository [`LICENSE`](../../LICENSE).

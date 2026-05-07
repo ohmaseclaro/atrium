@@ -1,4 +1,4 @@
-# @atrium/protocol
+# @ohmaseclaro/atrium-protocol
 
 Shared **Zod** schemas and **TypeScript** types for Atrium **WebSocket JSON** messages (viewer ↔ API relay ↔ worker) and a few **HTTP request bodies** (session bootstrap).
 
@@ -7,17 +7,17 @@ Shared **Zod** schemas and **TypeScript** types for Atrium **WebSocket JSON** me
 ## Install
 
 ```bash
-npm install @atrium/protocol
+npm install @ohmaseclaro/atrium-protocol
 ```
 
-With pnpm: `pnpm add @atrium/protocol`.
+With pnpm: `pnpm add @ohmaseclaro/atrium-protocol`.
 
-Most applications do not need to install this directly; `@atrium/server`, `@atrium/react`, and `@atrium/worker` depend on it automatically. Install it directly when you want to validate wire messages or bootstrap payloads yourself.
+Most applications do not need to install this directly; `@ohmaseclaro/atrium-server`, `@ohmaseclaro/atrium-react`, and `@ohmaseclaro/atrium-worker` depend on it automatically. Install it directly when you want to validate wire messages or bootstrap payloads yourself.
 
 ## Usage
 
 ```ts
-import { parseServerMessage, parseClientMessage, serverMessageSchema } from "@atrium/protocol";
+import { parseServerMessage, parseClientMessage, serverMessageSchema } from "@ohmaseclaro/atrium-protocol";
 
 const msg = parseServerMessage(JSON.parse(text));
 if (msg.t === "tabs") {
@@ -37,7 +37,7 @@ Source of truth: [`src/index.ts`](./src/index.ts).
 ## Build
 
 ```bash
-pnpm --filter @atrium/protocol run build
+pnpm --filter @ohmaseclaro/atrium-protocol run build
 ```
 
 MIT — see repository [`LICENSE`](../../LICENSE).

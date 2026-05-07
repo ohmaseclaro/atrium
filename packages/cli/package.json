@@ -1,5 +1,5 @@
 {
-  "name": "@atrium/cli",
+  "name": "@ohmaseclaro/atrium-cli",
   "version": "0.1.0",
   "description": "Developer utilities for the Atrium monorepo (placeholders for local stack helpers)",
   "license": "MIT",

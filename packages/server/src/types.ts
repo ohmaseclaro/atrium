@@ -1,5 +1,5 @@
 import type { Request } from "express";
-import type { ControlHolder, SessionStatus } from "@atrium/protocol";
+import type { ControlHolder, SessionStatus } from "@ohmaseclaro/atrium-protocol";
 
 export type Principal = {
   tenantId: string;

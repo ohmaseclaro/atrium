@@ -61,16 +61,16 @@ A few candidates with rationale; pick one before publishing the npm scope.
 
 For the rest of this document I will use **Atrium** as the placeholder name. Replace globally before publishing.
 
-Package layout under the chosen scope (`@atrium/*` shown):
+Package layout under the chosen scope (`@ohmaseclaro/atrium-*` shown):
 
 | Package            | Purpose                                                                     |
 | ------------------ | --------------------------------------------------------------------------- |
-| `@atrium/protocol` | Wire protocol types, shared across all packages                             |
-| `@atrium/server`   | Express-compatible middleware (the backend entry point)                     |
-| `@atrium/worker`   | Browser worker process; published as both an npm package and a Docker image |
-| `@atrium/react`    | React components and hooks (the client entry point)                         |
-| `@atrium/cli`      | Optional dev tool for running a local stack                                 |
-| `@atrium/demo`     | Full-stack demo app (Vite + Express) exercising the packages above          |
+| `@ohmaseclaro/atrium-protocol` | Wire protocol types, shared across all packages                             |
+| `@ohmaseclaro/atrium-server`   | Express-compatible middleware (the backend entry point)                     |
+| `@ohmaseclaro/atrium-worker`   | Browser worker process; published as both an npm package and a Docker image |
+| `@ohmaseclaro/atrium-react`    | React components and hooks (the client entry point)                         |
+| `@ohmaseclaro/atrium-cli`      | Optional dev tool for running a local stack                                 |
+| `@ohmaseclaro/atrium-demo`     | Full-stack demo app (Vite + Express) exercising the packages above          |
 
 ---
 
@@ -80,7 +80,7 @@ Package layout under the chosen scope (`@atrium/*` shown):
                                     ┌────────────────────────────┐
    ┌──────────────┐   HTTPS/WSS    │  Host application          │
    │  React client│ ◄────────────► │  ┌──────────────────────┐  │
-   │  (Atrium UI) │                │  │ @atrium/server (mw)  │  │
+   │  (Atrium UI) │                │  │ @ohmaseclaro/atrium-server (mw)  │  │
    └──────────────┘                │  └──────────┬───────────┘  │
                                    └─────────────┼──────────────┘
                                                  │
@@ -99,14 +99,14 @@ Package layout under the chosen scope (`@atrium/*` shown):
 
 ### Component responsibilities
 
-**React client (`@atrium/react`)**
+**React client (`@ohmaseclaro/atrium-react`)**
 
 - Renders frames received over WebSocket onto a `<canvas>`.
 - Captures pointer/keyboard/scroll/IME events and forwards them to the server.
-- Optionally renders embedded-browser chrome (back/forward/reload, URL bar, tab strip); see shipped [`@atrium/react`](../packages/react/README.md).
+- Optionally renders embedded-browser chrome (back/forward/reload, URL bar, tab strip); see shipped [`@ohmaseclaro/atrium-react`](../packages/react/README.md).
 - Reflects control state; disables input when locked to the agent.
 
-**API server / middleware (`@atrium/server`)**
+**API server / middleware (`@ohmaseclaro/atrium-server`)**
 
 - HTTP endpoints for session lifecycle (create, get, destroy, navigate, extract cookies).
 - WebSocket endpoint that proxies the live frame stream and input events between client and worker.
@@ -115,7 +115,7 @@ Package layout under the chosen scope (`@atrium/*` shown):
 - Enqueues session-create jobs onto BullMQ; reads worker state from Redis.
 - Stateless; can run behind any load balancer.
 
-**Worker (`@atrium/worker`)**
+**Worker (`@ohmaseclaro/atrium-worker`)**
 
 - BullMQ consumer; pulls session-create jobs.
 - Spawns a headful Chromium under Xvfb (or headless with stealth — configurable per job).
@@ -150,8 +150,8 @@ atrium/
 │   └── worker/
 │       └── Dockerfile
 ├── examples/
-│   ├── express-host/         # minimal host app using @atrium/server only
-│   ├── nextjs-app/           # (planned) Next.js + @atrium/react demo
+│   ├── express-host/         # minimal host app using @ohmaseclaro/atrium-server only
+│   ├── nextjs-app/           # (planned) Next.js + @ohmaseclaro/atrium-react demo
 │   └── docker-compose.yml    # (planned) local dev: redis + worker + example host
 └── docs/
     ├── remote-browser-design.md
@@ -160,7 +160,7 @@ atrium/
 
 ---
 
-## 5. Wire protocol (`@atrium/protocol`)
+## 5. Wire protocol (`@ohmaseclaro/atrium-protocol`)
 
 All messages JSON over WebSocket. Binary frames carry JPEG image data (avoiding base64 overhead).
 
@@ -261,13 +261,13 @@ When the focused element on the page is `input[type=password]`, the server does 
 
 ---
 
-## 6. Backend middleware: `@atrium/server`
+## 6. Backend middleware: `@ohmaseclaro/atrium-server`
 
 ### 6.1 Public API
 
 ```ts
 import express from "express";
-import { atrium } from "@atrium/server";
+import { atrium } from "@ohmaseclaro/atrium-server";
 
 const app = express();
 
@@ -360,7 +360,7 @@ Both are local; nothing must be replicated across nodes for correctness. Any API
 
 ---
 
-## 7. Browser worker: `@atrium/worker`
+## 7. Browser worker: `@ohmaseclaro/atrium-worker`
 
 ### 7.1 Process model
 
@@ -570,12 +570,12 @@ ENTRYPOINT ["/usr/bin/tini","--","/entrypoint.sh"]
 
 ---
 
-## 8. React client: `@atrium/react`
+## 8. React client: `@ohmaseclaro/atrium-react`
 
 ### 8.1 Public API
 
 ```tsx
-import { RemoteBrowser, useSession } from "@atrium/react";
+import { RemoteBrowser, useSession } from "@ohmaseclaro/atrium-react";
 
 function MyAuthFlow({ session }) {
   return (
@@ -639,7 +639,7 @@ Wrapping the canvas in a focusable `<div tabIndex={0} onKeyDown onMouseMove onPo
 
 ### 8.5 Optional embedded-browser chrome
 
-The shipped **`@atrium/react`** viewer uses a neutral, Chrome-_like_ layout (not a Google trademark) so users feel comfortable typing credentials. **Implemented today:** back / forward / reload, read-only URL bar (`navigate` / `title` messages), tab strip when the worker emits **`tabs`**, optional session status line, and presets **`none` / `minimal` / `full`** plus per-flag overrides (see [`packages/react/README.md`](../packages/react/README.md)).
+The shipped **`@ohmaseclaro/atrium-react`** viewer uses a neutral, Chrome-_like_ layout (not a Google trademark) so users feel comfortable typing credentials. **Implemented today:** back / forward / reload, read-only URL bar (`navigate` / `title` messages), tab strip when the worker emits **`tabs`**, optional session status line, and presets **`none` / `minimal` / `full`** plus per-flag overrides (see [`packages/react/README.md`](../packages/react/README.md)).
 
 **Target / incremental polish** (design intent; not all are in the default UI yet):
 
@@ -842,7 +842,7 @@ These are deliberately left for the implementation team to decide based on conte
 ## Appendix A: TypeScript types (excerpt)
 
 ```ts
-// @atrium/protocol
+// @ohmaseclaro/atrium-protocol
 
 export type ControlState = {
   holder: "agent" | "human" | "idle";

@@ -1,23 +1,23 @@
 {
-  "name": "@atrium/demo",
+  "name": "@ohmaseclaro/atrium-demo",
   "private": true,
   "version": "0.0.0",
-  "description": "Full-stack demo: @atrium/server + @atrium/react + defaults (worker on 7070)",
+  "description": "Full-stack demo: @ohmaseclaro/atrium-server + @ohmaseclaro/atrium-react + defaults (worker on 7070)",
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "dev:worker": "pnpm --filter @atrium/worker start",
+    "dev:worker": "pnpm --filter @ohmaseclaro/atrium-worker start",
     "dev:web": "node scripts/wait-for-worker.mjs && tsx server/dev-server.ts",
     "dev:ui-only": "tsx server/dev-server.ts",
     "build": "vite build && tsc -p server/tsconfig.json --pretty false",
     "start": "NODE_ENV=production node dist/server/prod-server.js",
     "lint": "pnpm run typecheck",
-    "typecheck": "pnpm --filter @atrium/protocol build && pnpm --filter @atrium/react build && tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit"
+    "typecheck": "pnpm --filter @ohmaseclaro/atrium-protocol build && pnpm --filter @ohmaseclaro/atrium-react build && tsc -p server/tsconfig.json --noEmit && tsc -p client/tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@atrium/protocol": "workspace:*",
-    "@atrium/react": "workspace:*",
-    "@atrium/server": "workspace:*",
+    "@ohmaseclaro/atrium-protocol": "workspace:*",
+    "@ohmaseclaro/atrium-react": "workspace:*",
+    "@ohmaseclaro/atrium-server": "workspace:*",
     "express": "^4.21.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

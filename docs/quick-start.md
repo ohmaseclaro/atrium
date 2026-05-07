@@ -7,7 +7,7 @@ Use Atrium when your app needs a real Chromium session that can be streamed into
 For an Express host with a React viewer:
 
 ```bash
-npm install express @atrium/server @atrium/react @atrium/worker
+npm install express @ohmaseclaro/atrium-server @ohmaseclaro/atrium-react @ohmaseclaro/atrium-worker
 npm install react react-dom
 npx playwright install chromium
 ```
@@ -15,11 +15,11 @@ npx playwright install chromium
 With pnpm:
 
 ```bash
-pnpm add express @atrium/server @atrium/react @atrium/worker react react-dom
+pnpm add express @ohmaseclaro/atrium-server @ohmaseclaro/atrium-react @ohmaseclaro/atrium-worker react react-dom
 pnpm exec playwright install chromium
 ```
 
-`@atrium/protocol` is installed automatically by the public packages that need it. Install it directly only if you want to parse or validate wire messages yourself.
+`@ohmaseclaro/atrium-protocol` is installed automatically by the public packages that need it. Install it directly only if you want to parse or validate wire messages yourself.
 
 ## 2. Start the worker
 
@@ -44,7 +44,7 @@ Headed Chromium is the default. On Linux without a display, run with Xvfb or use
 ```ts
 import { createServer } from "node:http";
 import express from "express";
-import { atrium } from "@atrium/server";
+import { atrium } from "@ohmaseclaro/atrium-server";
 
 const app = express();
 
@@ -101,7 +101,7 @@ The response contains:
 ## 5. Render the React viewer
 
 ```tsx
-import { RemoteBrowser } from "@atrium/react";
+import { RemoteBrowser } from "@ohmaseclaro/atrium-react";
 
 export function BrowserPane({ session }: { session: SessionPayload }) {
   return (
@@ -145,7 +145,7 @@ This returns cookies plus Playwright `storageState`, so your app can continue fr
 ## Next steps
 
 - Full integration guide: [User guide](./user-guide.md)
-- React viewer props: [`@atrium/react`](../packages/react/README.md)
-- Server API: [`@atrium/server`](../packages/server/README.md)
-- Worker runtime: [`@atrium/worker`](../packages/worker/README.md)
+- React viewer props: [`@ohmaseclaro/atrium-react`](../packages/react/README.md)
+- Server API: [`@ohmaseclaro/atrium-server`](../packages/server/README.md)
+- Worker runtime: [`@ohmaseclaro/atrium-worker`](../packages/worker/README.md)
 - Publishing/release checklist: [npm publishing](./npm-publishing.md)

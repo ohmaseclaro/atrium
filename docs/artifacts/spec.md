@@ -38,7 +38,7 @@ Express 4, ws 8, Playwright 1.49, Zod 3, React 18, Vitest 3, ESLint 9 flat confi
 
 ## Test strategy
 
-- `pnpm test` — Vitest projects for `@atrium/protocol`, `@atrium/server`, `@atrium/worker`, `@atrium/react`.
+- `pnpm test` — Vitest projects for `@ohmaseclaro/atrium-protocol`, `@ohmaseclaro/atrium-server`, `@ohmaseclaro/atrium-worker`, `@ohmaseclaro/atrium-react`.
 - `pnpm lint` — ESLint on the monorepo, Prettier `--check`, recursive `tsc --noEmit`.
 
 ## Rollout

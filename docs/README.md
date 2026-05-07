@@ -22,11 +22,11 @@ Start here, then jump into the topic you need.
 
 Each package has its own README with install and API notes:
 
-- [`@atrium/protocol`](../packages/protocol/README.md) — Zod schemas and TypeScript types for WebSocket messages.
-- [`@atrium/server`](../packages/server/README.md) — `atrium()` Express mount, viewer WebSocket upgrade.
-- [`@atrium/worker`](../packages/worker/README.md) — Chromium worker process and Docker notes.
-- [`@atrium/react`](../packages/react/README.md) — `<RemoteBrowser />` props, optional chrome, multi-tab UI.
-- [`@atrium/cli`](../packages/cli/README.md) — Local developer entrypoint (`atrium doctor`).
+- [`@ohmaseclaro/atrium-protocol`](../packages/protocol/README.md) — Zod schemas and TypeScript types for WebSocket messages.
+- [`@ohmaseclaro/atrium-server`](../packages/server/README.md) — `atrium()` Express mount, viewer WebSocket upgrade.
+- [`@ohmaseclaro/atrium-worker`](../packages/worker/README.md) — Chromium worker process and Docker notes.
+- [`@ohmaseclaro/atrium-react`](../packages/react/README.md) — `<RemoteBrowser />` props, optional chrome, multi-tab UI.
+- [`@ohmaseclaro/atrium-cli`](../packages/cli/README.md) — Local developer entrypoint (`atrium doctor`).
 
 ### Docker
 

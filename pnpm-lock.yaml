@@ -53,7 +53,7 @@ importers:
 
   examples/express-host:
     dependencies:
-      '@atrium/server':
+      '@ohmaseclaro/atrium-server':
         specifier: workspace:*
         version: link:../../packages/server
       express:
@@ -84,13 +84,13 @@ importers:
 
   packages/demo:
     dependencies:
-      '@atrium/protocol':
+      '@ohmaseclaro/atrium-protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@atrium/react':
+      '@ohmaseclaro/atrium-react':
         specifier: workspace:*
         version: link:../react
-      '@atrium/server':
+      '@ohmaseclaro/atrium-server':
         specifier: workspace:*
         version: link:../server
       express:
@@ -146,7 +146,7 @@ importers:
 
   packages/react:
     dependencies:
-      '@atrium/protocol':
+      '@ohmaseclaro/atrium-protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
@@ -177,7 +177,7 @@ importers:
 
   packages/server:
     dependencies:
-      '@atrium/protocol':
+      '@ohmaseclaro/atrium-protocol':
         specifier: workspace:*
         version: link:../protocol
       ws:
@@ -211,7 +211,7 @@ importers:
 
   packages/worker:
     dependencies:
-      '@atrium/protocol':
+      '@ohmaseclaro/atrium-protocol':
         specifier: workspace:*
         version: link:../protocol
       playwright:

@@ -1,5 +1,5 @@
 {
-  "name": "@atrium/protocol",
+  "name": "@ohmaseclaro/atrium-protocol",
   "version": "0.1.0",
   "description": "Shared wire types and validation for Atrium remote browser sessions",
   "license": "MIT",
