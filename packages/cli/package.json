@@ -1,0 +1,19 @@
+{
+  "name": "@atrium/cli",
+  "version": "0.1.0",
+  "description": "Developer utilities for the Atrium monorepo (placeholders for local stack helpers)",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "atrium": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

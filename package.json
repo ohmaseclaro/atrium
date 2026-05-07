@@ -1,0 +1,15 @@
+{
+  "name": "atrium",
+  "private": true,
+  "description": "Remote browser sessions for human-in-the-loop authentication — monorepo",
+  "license": "MIT",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "clean": "pnpm -r exec rm -rf dist"
+  }
+}
