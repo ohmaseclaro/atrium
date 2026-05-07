@@ -1,6 +1,6 @@
 # Deploying atriumjs.dev + demo.atriumjs.dev
 
-This mirrors the **Capitanias** production pattern: GitHub Actions SSH to the same VPS, **host nginx** on port **80**, TLS terminated at **Cloudflare** (same as other apps on the box).
+This mirrors the **Capitanias** production pattern: GitHub Actions SSH to the same VPS, **host nginx** on **80 + 443**. If Cloudflare SSL mode is **Full** or **Full (strict)** (recommended), Cloudflare connects to the origin over **HTTPS** — nginx must serve **TLS on 443** for `atriumjs.dev`, `www`, and `demo` (see templates under `deploy/nginx/`). **Flexible** (visitor→Cloudflare HTTPS, Cloudflare→origin HTTP) avoids origin TLS but is weaker; this repo assumes **Full** + Let’s Encrypt on the box.
 
 | Hostname              | What serves it                                                                                                     |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -50,15 +50,24 @@ There is **no Docker** requirement for the landing page or the demo Node process
 
 6. **Worker** — run `@atriumjs/worker` on the host (Docker or systemd) so the dial URL in `atrium-demo.env` works.
 
-7. **Passwordless sudo** for `deploy` — `deploy/update-demo.sh` runs as `deploy` and uses `sudo` for `systemctl restart atrium-demo`, copying nginx vhosts into `/etc/nginx/sites-available/`, `nginx -t`, and `systemctl reload nginx`. Add an `/etc/sudoers.d/` drop-in that matches your paths (`command -v nginx systemctl` on the server).
+7. **TLS on the origin (required for Cloudflare Full)** — before the first `nginx -t` with the current templates, obtain a certificate whose SANs include all three hostnames (one cert is enough):
 
-8. **First deploy** — after step 7:
+   ```bash
+   sudo mkdir -p /var/www/certbot
+   sudo certbot certonly --nginx -d atriumjs.dev -d www.atriumjs.dev -d demo.atriumjs.dev
+   ```
+
+   Paths in the repo vhosts expect **`/etc/letsencrypt/live/atriumjs.dev/{fullchain.pem,privkey.pem}`** and the standard **`options-ssl-nginx.conf`** / **`ssl-dhparams.pem`** from certbot. HTTP **:80** keeps **`/.well-known/acme-challenge/`** on `root /var/www/certbot` for renewals; other requests redirect to HTTPS.
+
+8. **Passwordless sudo** for `deploy` — `deploy/update-demo.sh` runs as `deploy` and uses `sudo` for `systemctl restart atrium-demo`, copying nginx vhosts into `/etc/nginx/sites-available/`, `nginx -t`, and `systemctl reload nginx`. Add an `/etc/sudoers.d/` drop-in that matches your paths (`command -v nginx systemctl` on the server).
+
+9. **First deploy** — after step 8:
 
    ```bash
    cd /home/atrium && ./deploy/update-demo.sh
    ```
 
-   If nginx is not installed: `apt install nginx`. With **Cloudflare Full** to origin HTTP, the repo vhosts listen on **port 80** only (same model as Capitanias’ `capitanias-host.conf`).
+   If nginx is not installed: `apt install nginx`.
 
 ## Nginx files in the repo
 
@@ -71,7 +80,7 @@ There is **no Docker** requirement for the landing page or the demo Node process
 
 ## GitHub Actions
 
-Workflow: `.github/workflows/deploy-demo.yml` (repository root). On pushes to `main` that touch the demo, libraries, lockfile, or **`deploy/**`**, it runs **lint → test → build**, SSHs to the VPS, runs `./deploy/update-demo.sh`, then checks **demo** (`/atrium/healthz` on loopback) and **landing** (`GET /`with`Host: atriumjs.dev`).
+Workflow: `.github/workflows/deploy-demo.yml` (repository root). On pushes to `main` that touch the demo, libraries, lockfile, or **`deploy/**`**, it runs **lint → test → build**, SSHs to the VPS, runs `./deploy/update-demo.sh`, then checks **demo** (`/atrium/healthz` on loopback) and **landing** (HTTPS `GET /` to loopback with `--resolve atriumjs.dev:443:127.0.0.1`).
 
 **Secrets** — add them on **this** repository (forks do not inherit secrets from other repos). If `SSH_HOST` is missing, the deploy job fails immediately with a clear error (instead of `ssh-action`’s “missing server host”).
 
@@ -103,7 +112,7 @@ cd /home/atrium && ./deploy/update-demo.sh
 curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:7341/atrium/healthz
 curl -sS -o /dev/null -w "%{http_code}\n" https://demo.atriumjs.dev/atrium/healthz
 
-# Static landing (via nginx on the box)
+# Static landing (via nginx on the box; use -k only if the cert name does not match 127.0.0.1)
 curl -sS -o /dev/null -w "%{http_code}\n" -H "Host: atriumjs.dev" http://127.0.0.1/
-curl -sS -o /dev/null -w "%{http_code}\n" https://atriumjs.dev/
+curl -sS -o /dev/null -w "%{http_code}\n" --resolve atriumjs.dev:443:127.0.0.1 https://atriumjs.dev/
 ```
