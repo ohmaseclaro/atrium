@@ -304,6 +304,13 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
 
     const onPointerDown = (ev: PointerEvent): void => {
       canvas.setPointerCapture(ev.pointerId);
+      // Make sure subsequent key chords (Cmd/Ctrl+V, etc.) target the canvas.
+      // Without focus, keydown listeners on the canvas never fire.
+      try {
+        canvas.focus({ preventScroll: true });
+      } catch {
+        canvas.focus();
+      }
       sendMouse("down", ev);
     };
     const onPointerUp = (ev: PointerEvent): void => {
@@ -335,18 +342,29 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
       sendWs(ws, { t: "input", kind: "clipboard", payload: { action: "paste", text: t } });
     };
 
-    const onPaste = (ev: Event): void => {
-      if (ws.readyState !== WebSocket.OPEN) return;
-      const pev = ev as ClipboardEvent;
-      pev.preventDefault();
-      const fromEvent = pev.clipboardData?.getData("text/plain") ?? "";
-      if (fromEvent) {
-        sendPasteText(fromEvent);
-        return;
+    /**
+     * Read the user's local clipboard. Browsers only fire `paste` on editable targets,
+     * so on a `<canvas>` the only reliable path is `navigator.clipboard.readText()`.
+     * It needs HTTPS + a recent user gesture (the keydown is the gesture).
+     */
+    const readLocalClipboardAndPaste = (): void => {
+      const cb = navigator.clipboard;
+      if (cb && typeof cb.readText === "function") {
+        void cb
+          .readText()
+          .then(sendPasteText)
+          .catch(() => undefined);
       }
-      void navigator.clipboard.readText().then((t) => {
-        sendPasteText(t);
-      });
+    };
+
+    /** Fallback path: some browsers do fire `paste` on focused tabIndex'd elements. */
+    const onDocumentPaste = (ev: ClipboardEvent): void => {
+      if (document.activeElement !== canvas) return;
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const fromEvent = ev.clipboardData?.getData("text/plain") ?? "";
+      if (!fromEvent) return;
+      ev.preventDefault();
+      sendPasteText(fromEvent);
     };
 
     const accel = (ev: KeyboardEvent): boolean => ev.ctrlKey || ev.metaKey;
@@ -361,12 +379,13 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
       if (ws.readyState !== WebSocket.OPEN) return;
       if (ev.target !== canvas) return;
       if (isPasteChord(ev)) {
-        // Local clipboard is applied via the `paste` event (or readText fallback there).
+        ev.preventDefault();
+        readLocalClipboardAndPaste();
         return;
       }
       if (ev.key === "Insert" && ev.shiftKey) {
         ev.preventDefault();
-        void navigator.clipboard.readText().then((t) => sendPasteText(t));
+        readLocalClipboardAndPaste();
         return;
       }
       if (isCopyChord(ev)) {
@@ -405,18 +424,18 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
     canvas.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointermove", onPointerMove);
     canvas.addEventListener("wheel", onWheel, { passive: false });
-    canvas.addEventListener("paste", onPaste);
     canvas.addEventListener("keydown", onKeyDown);
     canvas.addEventListener("keyup", onKeyUp);
+    document.addEventListener("paste", onDocumentPaste, true);
 
     return () => {
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointerup", onPointerUp);
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("wheel", onWheel);
-      canvas.removeEventListener("paste", onPaste);
       canvas.removeEventListener("keydown", onKeyDown);
       canvas.removeEventListener("keyup", onKeyUp);
+      document.removeEventListener("paste", onDocumentPaste, true);
     };
   }, [interactive, holder, status, viewport.w, viewport.h]);
 
