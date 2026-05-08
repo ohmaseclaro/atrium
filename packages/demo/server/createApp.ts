@@ -13,6 +13,9 @@ export type AtriumDemoApp = {
 
 export function createAtriumDemoApp(): AtriumDemoApp {
   const app = express();
+  // One hop (nginx / Cloudflare) sets X-Forwarded-Proto — without this, req.protocol
+  // stays "http" and session responses use ws:// + http:// (mixed content on https pages).
+  app.set("trust proxy", 1);
   const workerDialBase = process.env.ATRIUM_WORKER_DIAL_BASE ?? DEFAULT_WORKER_DIAL;
   const workerSharedSecret = process.env.ATRIUM_WORKER_SECRET ?? DEFAULT_SECRET;
 

@@ -39,6 +39,7 @@ export function atrium(config: AtriumConfig): AtriumMount {
   router.use(async (req: Request, res: Response, next) => {
     try {
       const host = req.get("host") ?? "localhost";
+      // req.protocol respects X-Forwarded-Proto when the host app uses app.set("trust proxy", …).
       const proto = req.protocol === "https" ? "https" : "http";
       const origin = `${proto}://${host}`;
       const pathname = new URL(req.originalUrl, `${proto}://${host}`).pathname;
