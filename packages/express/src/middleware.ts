@@ -84,7 +84,8 @@ export function atrium(config: AtriumConfig): AtriumMount {
       // each `data:` chunk immediately instead of waiting for the upstream WS to close.
       // Buffering via `arrayBuffer()` defeats SSE end-to-end.
       const ctype = (webRes.headers.get("content-type") ?? "").toLowerCase();
-      const isStreaming = ctype.includes("text/event-stream") || ctype.includes("application/x-ndjson");
+      const isStreaming =
+        ctype.includes("text/event-stream") || ctype.includes("application/x-ndjson");
       if (isStreaming && webRes.body) {
         // Disable any compression / buffering middleware downstream and flush headers
         // immediately so the first bytes hit the wire.
@@ -102,7 +103,6 @@ export function atrium(config: AtriumConfig): AtriumMount {
           } catch {
             /* already ended */
           }
-          // eslint-disable-next-line no-console
           console.warn("[atrium] SSE stream relay error", err);
         });
         // Tear down the upstream when the viewer hangs up so we don't leak a Reader.

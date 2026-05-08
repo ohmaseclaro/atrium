@@ -199,7 +199,13 @@ export const RemoteBrowser = forwardRef<RemoteBrowserHandle, RemoteBrowserProps>
       // Keep the toast preference in a ref so toggling it doesn't tear down the WebSocket
       // (the property only affects whether we render a toast; not connection lifecycle).
       webauthnNoticeRef.current = webauthnNotice;
-    }, [props.onControlChange, props.onTerminated, props.onWebAuthnRequest, props.onError, webauthnNotice]);
+    }, [
+      props.onControlChange,
+      props.onTerminated,
+      props.onWebAuthnRequest,
+      props.onError,
+      webauthnNotice,
+    ]);
 
     const onExitFullScreenRef = useRef(props.onExitFullScreen);
     useEffect(() => {
