@@ -29,7 +29,7 @@ Each package has its own README with install and API notes:
 - [`@atriumjs/react`](../packages/react/README.md) — `<RemoteBrowser />` props, optional chrome, multi-tab UI.
 - [`@atriumjs/cli`](../packages/cli/README.md) — Local developer entrypoint (`atrium doctor`).
 
-Legacy npm names (`@atriumjs/atrium-*`) are thin shims in [`packages/legacy-shims/`](../packages/legacy-shims/); see [npm publishing](./npm-publishing.md).
+The legacy `@atriumjs/atrium-*` shim packages have been removed (see [npm publishing](./npm-publishing.md)); use the new `@atriumjs/*` names directly.
 
 ### Docker
 

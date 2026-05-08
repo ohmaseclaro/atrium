@@ -26,12 +26,6 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/legacy-shims/**/*.mjs"],
-    languageOptions: {
-      globals: { ...globals.node },
-    },
-  },
-  {
     files: [
       "packages/express/**/*.ts",
       "packages/worker/**/*.ts",
@@ -41,7 +35,6 @@ export default tseslint.config(
       "packages/demo/vite.config.ts",
       "packages/demo/scripts/**/*.mjs",
       "vitest.config.ts",
-      "packages/legacy-shims/**/*.ts",
       "**/*.test.ts",
     ],
     languageOptions: {

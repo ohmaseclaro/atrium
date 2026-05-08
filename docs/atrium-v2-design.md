@@ -45,7 +45,7 @@
 | `@atriumjs/atrium-cli`      | `@atriumjs/cli`      | extended (`atrium dev`, `atrium new`, `atrium doctor`)               |
 | `@atriumjs/atrium-demo`     | `@atriumjs/demo`     | unchanged role; uses the new packages                                |
 
-**Deprecation shims.** For each renamed package we publish one final v0.1.x release whose only job is to re-export from the new name and log a one-time deprecation warning to stderr at import time. Six months after v0.2 ships, we unpublish the shims (or mark them deprecated on npm; do not unpublish if downloads are non-trivial).
+**Deprecation shims.** During the v0.1 → v0.2 transition we shipped one final v0.1.x release per old name that re-exported from the new package and logged a one-time deprecation warning. These shims have been removed from the repo and unpublished from npm; new installs must use the `@atriumjs/*` names above.
 
 ---
 

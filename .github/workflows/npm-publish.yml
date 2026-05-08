@@ -1,4 +1,4 @@
-# Publishes public @atriumjs/* packages in dependency order, then legacy name shims.
+# Publishes public @atriumjs/* packages in dependency order.
 # Configure repository secret NPM_TOKEN (see docs/npm-publishing.md).
 
 name: Publish to npm
@@ -33,7 +33,6 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -e
-          for dir in packages/protocol packages/core packages/express packages/react packages/worker packages/cli \
-            packages/legacy-shims/atrium-protocol packages/legacy-shims/atrium-server packages/legacy-shims/atrium-react packages/legacy-shims/atrium-worker packages/legacy-shims/atrium-cli; do
+          for dir in packages/protocol packages/core packages/express packages/react packages/worker packages/cli; do
             (cd "$dir" && npm publish --access public)
           done

@@ -15,9 +15,7 @@ Atrium publishes as a small set of public scoped packages under `@atriumjs/*` (f
 
 `@atriumjs/demo` stays private and is not published.
 
-## Legacy npm names (`@atriumjs/atrium-*`)
-
-Published **0.1.1** shims under the old names (`@atriumjs/atrium-protocol`, `@atriumjs/atrium-server`, …) live in `packages/legacy-shims/`. Each re-exports the matching `@atriumjs/*` package and prints a **one-time** stderr warning on import. Prefer installing the new names directly.
+> **Removed:** the legacy `@atriumjs/atrium-*` shims (cli, protocol, react, server, worker) used during the v0.1 → v0.2 transition have been deleted from the repo and unpublished from npm. Install the new names above directly.
 
 ## Before the first publish
 
@@ -70,16 +68,6 @@ pnpm --dir packages/express publish --access public
 pnpm --dir packages/react publish --access public
 pnpm --dir packages/worker publish --access public
 pnpm --dir packages/cli publish --access public
-```
-
-Then publish the legacy shims (each depends on the corresponding `@atriumjs/*` package above):
-
-```bash
-pnpm --dir packages/legacy-shims/atrium-protocol publish --access public
-pnpm --dir packages/legacy-shims/atrium-server publish --access public
-pnpm --dir packages/legacy-shims/atrium-react publish --access public
-pnpm --dir packages/legacy-shims/atrium-worker publish --access public
-pnpm --dir packages/legacy-shims/atrium-cli publish --access public
 ```
 
 For a future all-at-once release, `pnpm -r publish --access public` is acceptable once the package order is known to work in CI.
