@@ -82,10 +82,13 @@ If nginx is not installed: `apt install nginx`.
 
 ## GitHub Actions
 
-Workflow: `.github/workflows/deploy-demo.yml` (repository root). On pushes to `main` that touch the demo, libraries, lockfile, or **`deploy/**`**, it runs **lint → test → build**, SSHs to the VPS, runs `./deploy/update-demo.sh`, then verifies:
+Workflow: `.github/workflows/deploy-demo.yml` (repository root). On pushes to `main` that touch the demo, libraries, lockfile, or **`deploy/**`**, it runs **lint → test → build**, then **one SSH session** to the VPS: `./deploy/update-demo.sh`, then **in the same connection** (avoids flaky re-dials) it checks:
 
-- **demo** — `GET /atrium/healthz` on loopback (`http://127.0.0.1` and the demo `PORT` from `deploy/atrium-demo.env`).
+- **demo** — `GET /atrium/healthz` on loopback (`PORT` from `deploy/atrium-demo.env`).
+- **worker** — `GET /healthz` on loopback (HTTP port parsed from `ATRIUM_WORKER_DIAL_BASE`, default **7070**); allow several minutes after the first Docker worker build.
 - **landing** — `GET /` over HTTPS to loopback, e.g. `curl --resolve atriumjs.dev:443:127.0.0.1 https://atriumjs.dev/`.
+
+SSH **timeout** is **10m** (dial + session) and **command_timeout** **60m** so `docker compose build` on the server can finish.
 
 **Secrets** — add them on **this** repository (forks do not inherit secrets from other repos). If `SSH_HOST` is missing, the deploy job fails immediately with a clear error (instead of `ssh-action`’s “missing server host”).
 
