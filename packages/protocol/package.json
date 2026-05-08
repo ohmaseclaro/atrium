@@ -28,7 +28,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -36,7 +37,8 @@
     "LICENSE"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "engines": {
     "node": ">=20"
@@ -44,7 +46,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "pnpm run typecheck",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "zod": "^3.24.1"

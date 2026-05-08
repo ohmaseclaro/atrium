@@ -29,7 +29,8 @@
     "./policies": {
       "types": "./dist/policies-demo.d.ts",
       "import": "./dist/policies-demo.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -37,14 +38,17 @@
     "LICENSE"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "build": "rimraf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@atriumjs/protocol": "workspace:*",
@@ -53,6 +57,7 @@
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/ws": "^8.5.13",
+    "rimraf": "^6.0.1",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
   }

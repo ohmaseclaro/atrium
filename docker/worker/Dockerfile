@@ -8,8 +8,9 @@ WORKDIR /repo
 ENV CI=true
 RUN corepack enable pnpm
 COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
+COPY pnpm-lock.yaml ./
 COPY packages ./packages
-RUN pnpm install
+RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @atriumjs/protocol build && pnpm --filter @atriumjs/worker build
 RUN apt-get update \
   && apt-get install -y --no-install-recommends xvfb xauth \

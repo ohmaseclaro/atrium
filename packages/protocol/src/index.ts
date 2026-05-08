@@ -87,6 +87,7 @@ export const serverMessageSchema = z.discriminatedUnion("t", [
     action: z.enum(["copy", "cut"]),
     text: z.string(),
   }),
+  z.object({ t: z.literal("pong") }),
 ]);
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 

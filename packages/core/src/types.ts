@@ -13,6 +13,13 @@ export type AtriumPolicies = {
   maxConcurrentSessionsPerTenant: number;
   urlAllowlist: string[];
   defaultViewport: { w: number; h: number };
+  /**
+   * Ordered viewer transports advertised on `POST /sessions` (highest priority first).
+   * The dispatch handler picks the first entry the request can support and returns ONLY
+   * that transport in the response — advertising more than one would let a second viewer
+   * dial kick the first off the worker's single sink WebSocket. Defaults to `["ws"]`.
+   */
+  transports?: Array<"ws" | "sse" | "poll">;
 };
 
 export type AtriumHooks = {
@@ -31,18 +38,6 @@ export type WorkerConfig = {
   tls?: { rejectUnauthorized?: boolean };
 };
 
-/** @deprecated Use `worker` on CreateAtriumConfig; kept for express adapter mapping */
-export type LegacyAtriumConfigShape = {
-  redis?: { url: string };
-  authorize: (input: AtriumHttpInput) => Promise<Principal>;
-  policies: AtriumPolicies;
-  hooks?: AtriumHooks;
-  workerDialBase: string;
-  workerSharedSecret: string;
-  mountPath?: string;
-  workerTls?: { rejectUnauthorized?: boolean };
-};
-
 export type CreateAtriumConfig = {
   authorize: (input: AtriumHttpInput) => Promise<Principal>;
   policies: AtriumPolicies;
@@ -51,6 +46,17 @@ export type CreateAtriumConfig = {
   mountPath?: string;
   /** Advertised viewer transports on POST /sessions */
   transports?: Array<"ws" | "sse" | "poll">;
+  /**
+   * Public base URL for viewer WebSocket and transport URLs (e.g. `https://api.example.com`).
+   * When set, POST /sessions ignores the incoming `Host` header for URL construction (Host forgery).
+   * Should match the URL browsers use to reach this app (including path prefix if the app is not at `/`).
+   */
+  publicBaseUrl?: string;
+  /**
+   * When true, registers `POST /sessions/:id/x-demo/compose-tweet` (demo-only; not for production libraries).
+   * @default false
+   */
+  enableDemoComposeRoutes?: boolean;
 };
 
 export type SessionRecord = {
@@ -60,6 +66,10 @@ export type SessionRecord = {
   viewerToken: string;
   viewerTokenExpiresAt: number;
   createdAt: number;
+  /** Hard expiry; janitor destroys the session once `Date.now() > expiresAt`. */
+  expiresAt: number;
+  /** Updated on each replay append + per-session HTTP route call (idle TTL tracking). */
+  lastActivityAt: number;
   status: SessionStatus;
   control: { holder: ControlHolder; since: number };
   currentUrl: string;

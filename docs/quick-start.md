@@ -49,7 +49,6 @@ import { atrium } from "@atriumjs/express";
 const app = express();
 
 const { router, handleViewerUpgrade } = atrium({
-  redis: { url: process.env.REDIS_URL ?? "redis://127.0.0.1:6379" },
   authorize: async (req) => {
     // Resolve this from your app's auth/session layer.
     return { tenantId: "demo", userId: "demo-user" };
@@ -64,6 +63,7 @@ const { router, handleViewerUpgrade } = atrium({
   workerDialBase: process.env.ATRIUM_WORKER_DIAL_BASE ?? "ws://127.0.0.1:7070",
   workerSharedSecret: process.env.ATRIUM_WORKER_SECRET ?? "replace-me",
   mountPath: "/atrium",
+  // Recommended behind a reverse proxy: publicBaseUrl: "https://api.yourdomain.com",
 });
 
 app.use("/atrium", router);

@@ -1,5 +1,6 @@
 import express, { type Request, type Response, type Router } from "express";
 import type { IncomingMessage } from "node:http";
+import { Readable } from "node:stream";
 import type { Duplex } from "node:stream";
 import { createAtrium, viewerStreamMatch } from "@atriumjs/core";
 import type { AtriumConfig } from "./types.js";
@@ -28,6 +29,8 @@ function mapToCore(config: AtriumConfig) {
     },
     mountPath: config.mountPath,
     transports: config.transports,
+    publicBaseUrl: config.publicBaseUrl,
+    enableDemoComposeRoutes: config.enableDemoComposeRoutes,
   };
 }
 
@@ -41,7 +44,13 @@ export function atrium(config: AtriumConfig): AtriumMount {
       const host = req.get("host") ?? "localhost";
       // req.protocol respects X-Forwarded-Proto when the host app uses app.set("trust proxy", …).
       const proto = req.protocol === "https" ? "https" : "http";
-      const origin = `${proto}://${host}`;
+      const pb = config.publicBaseUrl?.trim();
+      const origin =
+        pb && (pb.startsWith("http://") || pb.startsWith("https://"))
+          ? pb.replace(/\/$/, "")
+          : pb
+            ? `${proto}://${pb.replace(/\/$/, "")}`
+            : `${proto}://${host}`;
       const pathname = new URL(req.originalUrl, `${proto}://${host}`).pathname;
       const mount = (config.mountPath ?? "/atrium").replace(/\/$/, "");
       if (!pathname.startsWith(mount)) {
@@ -69,6 +78,38 @@ export function atrium(config: AtriumConfig): AtriumMount {
       });
       if (webRes.status === 204 || webRes.status === 304) {
         res.end();
+        return;
+      }
+      // Stream the body when the response is event-stream-y (SSE), so viewers receive
+      // each `data:` chunk immediately instead of waiting for the upstream WS to close.
+      // Buffering via `arrayBuffer()` defeats SSE end-to-end.
+      const ctype = (webRes.headers.get("content-type") ?? "").toLowerCase();
+      const isStreaming = ctype.includes("text/event-stream") || ctype.includes("application/x-ndjson");
+      if (isStreaming && webRes.body) {
+        // Disable any compression / buffering middleware downstream and flush headers
+        // immediately so the first bytes hit the wire.
+        res.setHeader("X-Accel-Buffering", "no");
+        if (typeof (res as unknown as { flushHeaders?: () => void }).flushHeaders === "function") {
+          (res as unknown as { flushHeaders: () => void }).flushHeaders();
+        }
+        const nodeStream = Readable.fromWeb(
+          webRes.body as unknown as import("node:stream/web").ReadableStream<Uint8Array>,
+        );
+        nodeStream.on("error", (err) => {
+          // Make sure a torn upstream doesn't leave the viewer hung.
+          try {
+            res.end();
+          } catch {
+            /* already ended */
+          }
+          // eslint-disable-next-line no-console
+          console.warn("[atrium] SSE stream relay error", err);
+        });
+        // Tear down the upstream when the viewer hangs up so we don't leak a Reader.
+        res.on("close", () => {
+          nodeStream.destroy();
+        });
+        nodeStream.pipe(res);
         return;
       }
       const buf = Buffer.from(await webRes.arrayBuffer());

@@ -50,7 +50,67 @@ describe("atrium HTTP routes", () => {
       .expect(200)
       .expect((res) => {
         expect(res.body.sessionId).toBe(created.body.sessionId);
+        expect(res.body.tenantId).toBeUndefined();
+        expect(res.body.userId).toBeUndefined();
       });
+  });
+
+  it("uses publicBaseUrl for session URLs instead of Host", async () => {
+    const app = express();
+    const { router } = atrium({
+      authorize: async () => ({ tenantId: "t", userId: "u" }),
+      policies: {
+        sessionTtlMs: 60_000,
+        idleTtlMs: 60_000,
+        maxConcurrentSessionsPerTenant: 5,
+        urlAllowlist: ["*"],
+        defaultViewport: { w: 1280, h: 800 },
+      },
+      workerDialBase: "ws://127.0.0.1:9",
+      workerSharedSecret: "secret",
+      mountPath: "/atrium",
+      publicBaseUrl: "https://trusted.example",
+    });
+    app.use("/atrium", router);
+
+    const created = await request(app)
+      .post("/atrium/sessions")
+      .set("Host", "evil.example")
+      .send({})
+      .expect(201);
+    expect(created.body.wsUrl).toContain("trusted.example");
+    expect(created.body.wsUrl).not.toContain("evil.example");
+  });
+
+  it("GET session returns 403 for a different user (same tenant)", async () => {
+    const app = express();
+    const { router } = atrium({
+      authorize: async (req) => {
+        const u = (req as Request).get("x-test-user");
+        return { tenantId: "t", userId: u === "b" ? "intruder" : "owner" };
+      },
+      policies: {
+        sessionTtlMs: 60_000,
+        idleTtlMs: 60_000,
+        maxConcurrentSessionsPerTenant: 5,
+        urlAllowlist: ["*"],
+        defaultViewport: { w: 1280, h: 800 },
+      },
+      workerDialBase: "ws://127.0.0.1:9",
+      workerSharedSecret: "secret",
+      mountPath: "/atrium",
+    });
+    app.use("/atrium", router);
+
+    const created = await request(app)
+      .post("/atrium/sessions")
+      .set("x-test-user", "a")
+      .send({})
+      .expect(201);
+    await request(app)
+      .get(`/atrium/sessions/${created.body.sessionId}`)
+      .set("x-test-user", "b")
+      .expect(403);
   });
 
   it("returns health and ready payloads", async () => {
@@ -480,6 +540,7 @@ describe("atrium session snapshot and bootstrap", () => {
       workerDialBase: `ws://127.0.0.1:${mock.port}`,
       workerSharedSecret: "secret",
       mountPath: "/atrium",
+      enableDemoComposeRoutes: true,
     });
     app.use("/atrium", router);
 

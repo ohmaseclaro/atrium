@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type {
   Browser,
@@ -66,6 +66,17 @@ export type WorkerServerOptions = {
    * process env or pass `true` here for headless (e.g. CI without Xvfb).
    */
   headless?: boolean;
+  /**
+   * Registers `POST /internal/session/:id/x-demo/compose-tweet` (X/Twitter demo automation).
+   * Off by default; enable for the official demo (`ATRIUM_X_DEMO_COMPOSE=1`).
+   */
+  enableXDemoCompose?: boolean;
+  /**
+   * After every API→worker stream WebSocket has disconnected, destroy the Chromium session
+   * following this idle delay (ms). `0` disables idle teardown (sessions only end on API DELETE
+   * or worker shutdown). Default 30 minutes.
+   */
+  transportIdleMs?: number;
 };
 
 type Sink = { ws: WebSocket | null };
@@ -93,6 +104,40 @@ type LiveSession = {
 };
 
 const sessions = new Map<string, LiveSession>();
+
+const idleDestroyTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function clearIdleDestroy(sessionId: string): void {
+  const t = idleDestroyTimers.get(sessionId);
+  if (t) clearTimeout(t);
+  idleDestroyTimers.delete(sessionId);
+}
+
+function scheduleIdleDestroy(sessionId: string, options: WorkerServerOptions): void {
+  clearIdleDestroy(sessionId);
+  const ms = options.transportIdleMs ?? 30 * 60_000;
+  if (ms <= 0) return;
+  idleDestroyTimers.set(
+    sessionId,
+    setTimeout(() => {
+      idleDestroyTimers.delete(sessionId);
+      const live = sessions.get(sessionId);
+      if (!live || live.sink.ws != null) return;
+      void destroyLiveSession(sessionId);
+    }, ms),
+  );
+}
+
+function secureTokenEquals(got: string, expected: string): boolean {
+  const a = Buffer.from(got, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
 
 type PendingBootstrap = {
   storageState?: unknown;
@@ -265,8 +310,8 @@ async function deletePageSelection(page: Page): Promise<void> {
         document.execCommand?.("delete");
       }
     });
-  } catch {
-    /* ignore */
+  } catch (e) {
+    console.warn("[atrium-worker] deletePageSelection evaluate failed", e);
   }
 }
 
@@ -297,6 +342,12 @@ async function dispatchClientInput(live: LiveSession, msg: ClientMessage): Promi
     await page.mouse.wheel(deltaX || 0, deltaY || 0);
     return;
   }
+  if (msg.t === "ime") {
+    const text = typeof msg.text === "string" ? msg.text : "";
+    if (!text) return;
+    await page.keyboard.insertText(text);
+    return;
+  }
   if (msg.t === "input" && msg.kind === "clipboard") {
     const p = msg.payload as { action?: unknown; text?: unknown };
     const action = String(p.action ?? "");
@@ -324,9 +375,21 @@ async function dispatchClientInput(live: LiveSession, msg: ClientMessage): Promi
     const p = msg.payload;
     const phase = String(p.type ?? "down");
     const key = String(p.key ?? "");
-    if (!key) return;
-    if (phase === "up") await page.keyboard.up(key);
-    else await page.keyboard.down(key);
+    const code = String((p as { code?: unknown }).code ?? "");
+    if (!key && !code) return;
+    const modifierByCode: Record<string, string> = {
+      MetaLeft: "Meta",
+      MetaRight: "Meta",
+      ControlLeft: "Control",
+      ControlRight: "Control",
+      ShiftLeft: "Shift",
+      ShiftRight: "Shift",
+      AltLeft: "Alt",
+      AltRight: "Alt",
+    };
+    const spec = key || modifierByCode[code] || code;
+    if (phase === "up") await page.keyboard.up(spec);
+    else await page.keyboard.down(spec);
   }
 }
 
@@ -622,7 +685,7 @@ async function handleInternalHttp(
   }
 
   const token = parseBearer(req.headers.authorization);
-  if (!token || token !== options.sharedSecret) {
+  if (!token || !secureTokenEquals(token, options.sharedSecret)) {
     res.writeHead(401, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "unauthorized" }));
     return true;
@@ -640,6 +703,7 @@ async function handleInternalHttp(
     const sessionId = decodeURIComponent(mPend[1]);
     pendingBootstraps.delete(sessionId);
     pendingControl.delete(sessionId);
+    await destroyLiveSession(sessionId);
     res.writeHead(204);
     res.end();
     return true;
@@ -668,7 +732,7 @@ async function handleInternalHttp(
     return true;
   }
 
-  if (req.method === "POST" && mXt) {
+  if (options.enableXDemoCompose === true && req.method === "POST" && mXt) {
     const sessionId = decodeURIComponent(mXt[1]);
     if (options.dryRun) {
       writeJson(res, 501, { error: "dry_run" });
@@ -711,7 +775,7 @@ async function handleInternalHttp(
       return true;
     }
     if (sessions.has(sessionId)) {
-      writeJson(res, 409, { error: "session_already_active" });
+      writeJson(res, 409, { error: "session_already_live" });
       return true;
     }
     const body = await readJsonBody(req);
@@ -807,6 +871,7 @@ async function handleInternalHttp(
 }
 
 async function destroyLiveSession(sessionId: string): Promise<void> {
+  clearIdleDestroy(sessionId);
   const live = sessions.get(sessionId);
   if (!live) return;
   sessions.delete(sessionId);
@@ -815,13 +880,13 @@ async function destroyLiveSession(sessionId: string): Promise<void> {
   if (live.tabBroadcastTimer) clearTimeout(live.tabBroadcastTimer);
   try {
     await live.context.close();
-  } catch {
-    /* ignore */
+  } catch (e) {
+    console.warn("[atrium-worker] context.close during destroy", e);
   }
   try {
     await live.browser.close();
-  } catch {
-    /* ignore */
+  } catch (e) {
+    console.warn("[atrium-worker] browser.close during destroy", e);
   }
 }
 
@@ -897,7 +962,7 @@ export async function startWorkerServer(options: WorkerServerOptions): Promise<{
       return;
     }
     const token = parseBearer(req.headers.authorization);
-    if (!token || token !== options.sharedSecret) {
+    if (!token || !secureTokenEquals(token, options.sharedSecret)) {
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();
       return;
@@ -929,6 +994,9 @@ export async function startWorkerServer(options: WorkerServerOptions): Promise<{
     port,
     close: async () => {
       if (memoryTimer) clearInterval(memoryTimer);
+      for (const id of [...idleDestroyTimers.keys()]) {
+        clearIdleDestroy(id);
+      }
       pendingBootstraps.clear();
       pendingControl.clear();
       for (const id of [...sessions.keys()]) {
@@ -942,6 +1010,79 @@ export async function startWorkerServer(options: WorkerServerOptions): Promise<{
       });
     },
   };
+}
+
+function wireDialSocket(
+  live: LiveSession,
+  ws: WebSocket,
+  sessionId: string,
+  options: WorkerServerOptions,
+): void {
+  clearIdleDestroy(sessionId);
+  const sink = live.sink;
+  const prev = sink.ws;
+  if (prev && prev !== ws) {
+    try {
+      prev.removeAllListeners();
+      if (prev.readyState === WebSocket.OPEN) prev.close();
+    } catch (e) {
+      console.warn("[atrium-worker] close previous dial socket", e);
+    }
+  }
+  sink.ws = ws;
+
+  ws.on("message", async (raw) => {
+    const liveNow = sessions.get(sessionId);
+    if (!liveNow) return;
+    const data = raw.toString();
+    try {
+      const msg = parseClientMessage(JSON.parse(data));
+      if (msg.t === "ping") {
+        sendJson(liveNow.sink, { t: "pong" });
+        return;
+      }
+      if (
+        msg.t === "tab_activate" ||
+        msg.t === "tab_close" ||
+        msg.t === "reload" ||
+        msg.t === "back" ||
+        msg.t === "forward"
+      ) {
+        await handleTabClientMessage(liveNow, msg);
+        return;
+      }
+      if (msg.t === "navigate") {
+        await liveNow.page.goto(msg.url, { waitUntil: "domcontentloaded" }).catch((err) => {
+          console.warn("[atrium-worker] WS navigate failed", err);
+        });
+        return;
+      }
+      if (msg.t === "request_control" || msg.t === "release_control") {
+        // Viewer-initiated control change. Authoritative source-of-truth lives in the
+        // host app's session store via POST /sessions/:id/control; this WS path mirrors
+        // the new holder locally and broadcasts so the active viewer sees the change
+        // immediately. Hosts that need cross-node consistency should still call the HTTP
+        // endpoint for any state that other API nodes need to read.
+        const next: ControlHolder = msg.t === "request_control" ? "human" : "agent";
+        liveNow.control = { holder: next, since: Date.now() };
+        sendJson(liveNow.sink, { t: "control", holder: next });
+        return;
+      }
+      if (msg.t === "webauthn_decision") {
+        return;
+      }
+      await dispatchClientInput(liveNow, msg);
+    } catch (e) {
+      console.warn("[atrium-worker] dial message parse/handle error", e);
+    }
+  });
+
+  ws.on("close", () => {
+    if (sink.ws === ws) {
+      sink.ws = null;
+      scheduleIdleDestroy(sessionId, options);
+    }
+  });
 }
 
 async function attachDryPipeline(ws: WebSocket, sessionId: string): Promise<void> {
@@ -971,8 +1112,18 @@ async function attachSessionPipeline(
     return;
   }
 
-  if (sessions.has(sessionId)) {
-    await destroyLiveSession(sessionId);
+  const existing = sessions.get(sessionId);
+  if (existing) {
+    wireDialSocket(existing, ws, sessionId, options);
+    const vp = existing.page.viewportSize() ?? { width: 1280, height: 800 };
+    sendJson(existing.sink, {
+      t: "hello",
+      sessionId,
+      control: existing.control,
+      viewport: { w: vp.width, h: vp.height },
+    });
+    void broadcastTabsState(existing);
+    return;
   }
 
   const sink: Sink = { ws };
@@ -1048,41 +1199,7 @@ async function attachSessionPipeline(
     });
     void broadcastTabsState(live);
 
-    ws.on("message", async (raw) => {
-      const liveNow = sessions.get(sessionId);
-      if (!liveNow) return;
-      const data = raw.toString();
-      try {
-        const msg = parseClientMessage(JSON.parse(data));
-        if (msg.t === "ping") {
-          sendJson(sink, { t: "control", holder: liveNow.control.holder, reason: "pong" });
-          return;
-        }
-        if (
-          msg.t === "tab_activate" ||
-          msg.t === "tab_close" ||
-          msg.t === "reload" ||
-          msg.t === "back" ||
-          msg.t === "forward"
-        ) {
-          await handleTabClientMessage(liveNow, msg);
-          return;
-        }
-        if (msg.t === "webauthn_decision") {
-          /** No-op: page-side throws NotAllowedError immediately; this is accepted
-           *  from older clients for backward compatibility but is otherwise ignored. */
-          return;
-        }
-        await dispatchClientInput(liveNow, msg);
-      } catch {
-        /* ignore */
-      }
-    });
-
-    ws.on("close", async () => {
-      if (sink.ws === ws) sink.ws = null;
-      await destroyLiveSession(sessionId);
-    });
+    wireDialSocket(live, ws, sessionId, options);
   } catch (err) {
     pendingBootstraps.delete(sessionId);
     if (sessions.has(sessionId)) {
@@ -1090,8 +1207,8 @@ async function attachSessionPipeline(
     } else if (browser) {
       try {
         await browser.close();
-      } catch {
-        /* ignore */
+      } catch (e) {
+        console.warn("[atrium-worker] browser.close after start failure", e);
       }
     }
     sendJson(sink, {

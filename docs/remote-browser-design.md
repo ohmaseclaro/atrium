@@ -8,6 +8,8 @@
 
 **Docs:** [Documentation hub](./README.md) · [User guide](./user-guide.md) · [Repository README](../README.md)
 
+> **Reading this doc.** §§1–6 describe the architecture **as shipped today** — Express middleware, framework-agnostic `@atriumjs/core`, in-memory session store, dial WebSockets to a Playwright worker, CDP screencast, `AtriumPolicies` enforcement (per-tenant quota + idle/session TTL janitor), `publicBaseUrl` URL hardening, viewer-side URL allowlist for `navigate`. §§7+ describe a future **BullMQ / Redis allocator** for horizontal scaling at hundreds of concurrent sessions per node — that path is **not in v0.x** and is kept as forward-looking design intent. v0.x runs without Redis/BullMQ.
+
 ---
 
 ## 1. Goals and non-goals
@@ -26,7 +28,7 @@ After the human finishes, the host application can extract the resulting cookies
 The library ships as three independently consumable packages plus a Docker image:
 
 1. A **backend middleware** that mounts onto any Express-compatible HTTP server and exposes session-management endpoints + a WebSocket relay.
-2. A **browser worker** distributed as a Docker image, scaled horizontally via BullMQ, with per-session CPU/memory caps.
+2. A **browser worker** distributed as a Docker image; the API tier dials it directly per session (BullMQ / Redis allocator is on the v1+ roadmap, see §§7+), with per-session CPU/memory caps.
 3. A **React client** that renders the live CDP frame stream with **optional** embedded-browser chrome (tab strip, URL bar, navigation); see [`packages/react/README.md`](../packages/react/README.md).
 
 ### Non-goals
@@ -41,7 +43,7 @@ The library ships as three independently consumable packages plus a Docker image
 
 1. **Server-authoritative.** The client is a dumb renderer + input forwarder. Locking, control state, lifecycle, and cookie extraction are all enforced server-side. The client UI reflects state, never determines it.
 2. **Bring-your-own auth.** The middleware accepts an `authorize(req)` hook from the host app. We do not ship users, sessions, JWTs, or RBAC.
-3. **Stateless API server, stateful workers.** API nodes are horizontally scalable with zero local state. Workers own one or more Chromium processes and report their state through Redis.
+3. **Stateless API server, stateful workers.** API nodes are horizontally scalable with zero local state. Workers own one or more Chromium processes; the v0.x in-memory session store is single-node and is replaced by Redis-backed coordination in the v1+ allocator path described in §§7+.
 4. **Pessimistic resource control.** Every session has a hard CPU limit, a hard memory limit, and an idle TTL. Workers refuse jobs they cannot accommodate.
 5. **CDP-only streaming.** No Xvfb, no VNC, no WebRTC. Headful Chromium under a virtual framebuffer when anti-bot evasion is required (toggleable per session), but the frame transport is always CDP screencast over WebSocket.
 
@@ -74,28 +76,29 @@ Package layout under the chosen scope (`@atriumjs/*` shown):
 
 ---
 
-## 3. High-level architecture
+## 3. High-level architecture (v0.x — as shipped)
 
 ```
                                     ┌────────────────────────────┐
    ┌──────────────┐   HTTPS/WSS    │  Host application          │
    │  React client│ ◄────────────► │  ┌──────────────────────┐  │
-   │  (Atrium UI) │                │  │ @atriumjs/express (mw)  │  │
-   └──────────────┘                │  └──────────┬───────────┘  │
+   │  (Atrium UI) │                │  │ @atriumjs/express    │  │
+   └──────────────┘                │  │   ↳ @atriumjs/core   │  │
+                                   │  │ (in-memory store +   │  │
+                                   │  │  janitor for TTLs)   │  │
+                                   │  └──────────┬───────────┘  │
                                    └─────────────┼──────────────┘
                                                  │
-                                          BullMQ / Redis
+                              dial: WSS  +  Authorization: Bearer
                                                  │
-                            ┌────────────────────┼─────────────────────┐
-                            │                    │                     │
-                       ┌────▼─────┐         ┌────▼─────┐          ┌────▼─────┐
-                       │ Worker A │         │ Worker B │   ...    │ Worker N │
-                       │ ┌──────┐ │         │ ┌──────┐ │          │ ┌──────┐ │
-                       │ │Chrom.│ │         │ │Chrom.│ │          │ │Chrom.│ │
-                       │ │ x N  │ │         │ │ x N  │ │          │ │ x N  │ │
-                       │ └──────┘ │         │ └──────┘ │          │ └──────┘ │
-                       └──────────┘         └──────────┘          └──────────┘
+                                          ┌──────▼──────┐
+                                          │  Worker N   │  ← scaled by
+                                          │ (Chromium + │     replicating
+                                          │  Playwright)│     the worker
+                                          └─────────────┘     process
 ```
+
+For the future BullMQ/Redis-coordinated allocator (multi-worker pool, per-tenant quotas in Redis, capacity-aware placement), see §§7+ — that path is **not** in v0.x.
 
 ### Component responsibilities
 
@@ -112,13 +115,13 @@ Package layout under the chosen scope (`@atriumjs/*` shown):
 - WebSocket endpoint that proxies the live frame stream and input events between client and worker.
 - Enforces auth via host-provided hook.
 - Enforces control-state policy (only one writer at a time).
-- Enqueues session-create jobs onto BullMQ; reads worker state from Redis.
-- Stateless; can run behind any load balancer.
+- v0.x: dials a configured worker base URL directly. v1+: enqueues session-create jobs onto BullMQ; reads worker state from Redis.
+- Stateless at the HTTP layer; horizontally scalable behind any load balancer.
 
 **Worker (`@atriumjs/worker`)**
 
-- BullMQ consumer; pulls session-create jobs.
-- Spawns a headful Chromium under Xvfb (or headless with stealth — configurable per job).
+- v0.x: accepts inbound dials from the API tier on `/internal/stream/:sessionId`. v1+: BullMQ consumer pulling session-create jobs.
+- Spawns a headful Chromium under Xvfb (or headless with stealth — configurable per session).
 - Attaches to the Chromium via CDP, starts `Page.startScreencast`.
 - Opens an internal WebSocket back to the API server (or accepts inbound) carrying frames and accepting input events.
 - Reports liveness, CPU%, RSS, session count to Redis on a heartbeat.
@@ -267,36 +270,42 @@ When the focused element on the page is `input[type=password]`, the server does 
 
 ```ts
 import express from "express";
+import { createServer } from "node:http";
 import { atrium } from "@atriumjs/express";
 
 const app = express();
 
-app.use(
-  "/atrium",
-  atrium({
-    redis: { url: process.env.REDIS_URL! },
-    authorize: async (req) => {
-      // Host-app responsibility. Return a tenant/user identifier or throw.
-      const user = await myAuthLayer(req);
-      return { tenantId: user.orgId, userId: user.id };
+const { router, handleViewerUpgrade } = atrium({
+  authorize: async (req) => {
+    const user = await myAuthLayer(req);
+    return { tenantId: user.orgId, userId: user.id };
+  },
+  policies: {
+    sessionTtlMs: 15 * 60_000,
+    idleTtlMs: 5 * 60_000,
+    maxConcurrentSessionsPerTenant: 5,
+    urlAllowlist: ["*"],
+    defaultViewport: { w: 1280, h: 800 },
+  },
+  workerDialBase: process.env.ATRIUM_WORKER_DIAL_BASE ?? "ws://127.0.0.1:7070",
+  workerSharedSecret: process.env.ATRIUM_WORKER_SECRET!,
+  mountPath: "/atrium",
+  publicBaseUrl: process.env.PUBLIC_BASE_URL, // recommended in production (Host header not trusted for wsUrl)
+  hooks: {
+    onSessionCreated: async (s) => {
+      /* analytics */
     },
-    policies: {
-      sessionTtlMs: 15 * 60_000,
-      idleTtlMs: 5 * 60_000,
-      maxConcurrentSessionsPerTenant: 5,
-      urlAllowlist: ["*"], // or e.g. ["https://accounts.google.com/*"]
-      defaultViewport: { w: 1280, h: 800 },
-    },
-    hooks: {
-      onSessionCreated: async (s) => {
-        /* analytics */
-      },
-      onCredentialsCollected: async (s, cookies) => {
-        /* persist */
-      },
-    },
-  }),
-);
+  },
+});
+
+app.use("/atrium", router);
+
+const server = createServer(app);
+server.on("upgrade", (req, socket, head) => {
+  if (!req.url?.startsWith("/atrium/sessions/")) return;
+  handleViewerUpgrade(req, socket, head);
+});
+server.listen(3000);
 ```
 
 The middleware mounts:
@@ -310,22 +319,27 @@ The middleware mounts:
 - `GET    /sessions/:id/storage-state`
 - `WS     /sessions/:id/stream`
 
-The WebSocket handler can be attached either via Express's `upgrade` event or via the host's existing WS server (e.g., `ws`, `uWebSockets.js`). The middleware exports `attachWebSocket(httpServer)` for the second case.
+The viewer WebSocket is attached via **`http.Server.on("upgrade", …)`** → **`handleViewerUpgrade`** (see `examples/express-host`).
 
 ### 6.2 Internal flow on `POST /sessions`
 
+**Current implementation (this repo):**
+
 ```
 1. authorize(req) → { tenantId, userId }
-2. Check tenant quota (Redis INCR + GET).
-3. Generate sessionId (ULID).
-4. Generate single-use viewerToken (32 random bytes, signed JWT, exp 5m).
-5. Persist session record in Redis: status=pending, tenantId, userId, createdAt.
-6. Enqueue BullMQ job in queue "atrium:sessions:create" with sessionId.
-7. Wait (with timeout) for status transition to "ready" via Redis pub/sub.
-8. Return { sessionId, viewerToken, wsUrl, expiresAt }.
+2. Enforce maxConcurrentSessionsPerTenant against the in-memory store.
+3. createSession in MemorySessionStore (sessionId, viewerToken, pending → ready when worker connects).
+4. API opens outbound dial WebSocket to worker; worker attaches Chromium and begins screencast.
+5. Return { sessionId, viewerToken, wsUrl, transports, … } with URLs derived from publicBaseUrl when set.
 ```
 
-If no worker accepts the job within `acceptTimeoutMs` (default 30s), return 503 and mark the session `failed`. The host app can retry.
+**Original v1 design (BullMQ allocator — not wired in this codebase):**
+
+```
+… Redis INCR quota, BullMQ enqueue, wait for ready via pub/sub …
+```
+
+If the worker never becomes ready within the timeout, the API returns an error and the session is torn down.
 
 ### 6.3 WebSocket relay
 
@@ -559,8 +573,8 @@ COPY dist/ ./dist/
 COPY docker/worker/entrypoint.sh /entrypoint.sh
 
 EXPOSE 7070
-ENV WORKER_CAPACITY=4 \
-    REDIS_URL=redis://redis:6379 \
+ENV ATRIUM_WORKER_PORT=7070 \
+    ATRIUM_WORKER_SECRET=change-me \
     NODE_ENV=production
 USER 1000:1000
 ENTRYPOINT ["/usr/bin/tini","--","/entrypoint.sh"]
@@ -575,7 +589,7 @@ ENTRYPOINT ["/usr/bin/tini","--","/entrypoint.sh"]
 ### 8.1 Public API
 
 ```tsx
-import { RemoteBrowser, useSession } from "@atriumjs/react";
+import { RemoteBrowser } from "@atriumjs/react";
 
 function MyAuthFlow({ session }) {
   return (
@@ -594,27 +608,11 @@ function MyAuthFlow({ session }) {
 
 The component renders the page canvas; optional presets add a toolbar (back/forward/reload), read-only URL bar, and tab strip. A small session status line can be toggled separately (`showSessionStatus`).
 
-### 8.2 Hook for advanced layouts
+### 8.2 Advanced layouts and session tuple state
 
-```tsx
-const {
-  status, // "connecting" | "ready" | "active" | "terminated"
-  controlHolder, // "agent" | "human" | "idle"
-  url, // current page URL
-  title, // current page title
-  loading, // boolean
-  requestControl, // () => void
-  releaseControl, // () => void
-  navigate, // (url: string) => void
-  back,
-  forward,
-  reload,
-  canvasRef, // attach to <canvas>
-  inputProps, // spread onto a focusable wrapper for input capture
-} = useSession({ sessionId, viewerToken, wsUrl });
-```
+`RemoteBrowser` owns transport, rendering, control handoff, reconnect/backoff, and optional chrome. For **imperative** actions (e.g. `reconnect()` after swapping `wsUrl`), use a **`ref`** typed as **`RemoteBrowserHandle`** (see `packages/react/README.md`).
 
-This lets consumers build custom UIs (no toolbar, embedded in a modal, etc.) while still getting wire-protocol handling and frame rendering.
+For hosts that keep session identifiers in React state outside the component, **`useRemoteBrowserSession`** returns **`[session, patchSession]`** — a small tuple helper only; it does not expose canvas or control APIs. A future **`useSession`**-style hook may consolidate those controls; today they live on **`RemoteBrowser`** / its ref.
 
 ### 8.3 Frame rendering
 
@@ -748,30 +746,14 @@ Note: allowlisting cannot prevent an authenticated user from being redirected mi
 
 ### 11.1 Local development
 
-`docker-compose.yml` ships with the repo:
+**Worker container:** `deploy/docker-compose.worker.yml` builds the Playwright worker and publishes `7070` on loopback (see comments in that file for env vars).
+
+**API host:** run `examples/express-host` (or your app) on the host with `ATRIUM_WORKER_DIAL_BASE=ws://127.0.0.1:7070` and matching `ATRIUM_WORKER_SECRET`. There is no Redis service in the default compose — allocator/coordinator Redis remains future work.
 
 ```yaml
-services:
-  redis:
-    image: redis:7-alpine
-  worker:
-    image: atrium/worker:dev
-    depends_on: [redis]
-    environment:
-      REDIS_URL: redis://redis:6379
-      WORKER_CAPACITY: "2"
-    deploy:
-      resources:
-        limits: { cpus: "2", memory: 4g }
-  example-host:
-    build: ./examples/express-host
-    ports: ["3000:3000"]
-    depends_on: [redis]
-    environment:
-      REDIS_URL: redis://redis:6379
+# Aspirational multi-service compose (Redis/BullMQ) — not checked into repo as the default dev path.
+# services: { redis: …, worker: …, example-host: … }
 ```
-
-`pnpm dev` brings everything up. The example host serves the React demo at `localhost:3000` with a "Start session" button.
 
 ### 11.2 Production
 

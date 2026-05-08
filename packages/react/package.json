@@ -28,7 +28,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -36,7 +37,8 @@
     "LICENSE"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "engines": {
     "node": ">=20"
@@ -44,7 +46,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "pnpm run typecheck",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@atriumjs/protocol": "workspace:*"
@@ -53,13 +56,16 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "jsdom": "^25.0.1",
     "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
   },
   "peerDependencies": {
-    "react": "^18.2.0 || ^19.0.0"
+    "react": "^18.2.0 || ^19.0.0",
+    "react-dom": "^18.2.0 || ^19.0.0"
   }
 }

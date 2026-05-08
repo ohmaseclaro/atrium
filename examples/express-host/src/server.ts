@@ -7,7 +7,6 @@ const workerDialBase = process.env.ATRIUM_WORKER_DIAL_BASE ?? "ws://127.0.0.1:70
 const workerSharedSecret = process.env.ATRIUM_WORKER_SECRET ?? "dev-secret-change-me";
 
 const { router, handleViewerUpgrade } = atrium({
-  redis: { url: process.env.REDIS_URL ?? "redis://127.0.0.1:6379" },
   authorize: async (_req: Request) => ({ tenantId: "demo", userId: "anonymous" }),
   policies: {
     sessionTtlMs: 15 * 60_000,

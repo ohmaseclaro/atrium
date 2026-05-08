@@ -66,7 +66,6 @@ import { atrium } from "@atriumjs/express";
 
 const app = express();
 const { router, handleViewerUpgrade } = atrium({
-  redis: { url: process.env.REDIS_URL ?? "redis://127.0.0.1:6379" },
   authorize: async (req) => {
     /* resolve tenant/user from your session */
     return { tenantId: "t", userId: "u" };

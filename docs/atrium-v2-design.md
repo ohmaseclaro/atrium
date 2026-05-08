@@ -2,7 +2,7 @@
 
 > Status: Draft
 > Audience: Atrium maintainers
-> Scope: **Package renames (§2) and legacy shims are implemented.** `@atriumjs/core` (Fetch dispatch, memory store, WS/SSE/poll transports) and the **Express** adapter (`atrium()` → `createAtrium`) are implemented; **not yet in this repo:** Fastify/Hono/Next/Nest adapters, `@atriumjs/client` / `@atriumjs/sdk`, `collect`/`replay`, `mountExpress`, full `demoPolicies` (Turnstile/Tor/Redis Lua), `atrium dev` / `atrium new`, worker `/internal/.../automation`. Original v0.1 layout used `@atriumjs/atrium-*` on npm; new names are `@atriumjs/*` per the table below.
+> Scope: **Package renames (§2) and legacy shims are implemented.** `@atriumjs/core` (`createAtrium`, in-memory `MemorySessionStore`, WS/SSE/poll transports, `publicBaseUrl`, `viewerStreamMatch`) and **`@atriumjs/express`** (`atrium()` wrapping `createAtrium`) are implemented. **`@atriumjs/core/policies`** ships a partial `demoPolicies()` (in-memory rate hints; no Turnstile/Tor/Redis Lua yet). **Not yet in this repo:** Fastify/Hono/Next/Nest adapters, `@atriumjs/client` / `@atriumjs/sdk`, `collect`/`replay`, `mountExpress` (use `atrium()` + `handleViewerUpgrade` instead), pluggable Redis session store, `atrium dev` / `atrium new`, worker `/internal/.../automation`. Original v0.1 layout used `@atriumjs/atrium-*` on npm; new names are `@atriumjs/*` per the table below.
 > Engine architecture (dial pattern, Playwright, CDP screencast, server-authoritative control, snapshot APIs, mTLS, passkey strategy, Xvfb) is **locked** from v0.1 and not relitigated here.
 
 ---
@@ -98,7 +98,7 @@ Tooling:
 The core has three responsibilities:
 
 1. **HTTP request handling**: parse, authorize, dispatch, build responses — all expressed against the **Web Fetch API standard** (`Request` → `Response`).
-2. **Session state machine**: identical to v0.1 (pending → ready → active → terminated), backed by a pluggable store (in-memory by default, Redis for production).
+2. **Session state machine**: pending → ready → active → terminated, backed today by an in-process **`MemorySessionStore`** inside `createAtrium`. A typed async **`SessionStore`** interface exists for a future Redis (or other) implementation; it is not wired into `createAtrium` yet.
 3. **Transport abstraction**: a single `Relay` interface that the WS, SSE, and polling implementations all satisfy. Adapters wire the right one based on the runtime.
 
 ### 4.1 The single entry point
@@ -107,23 +107,29 @@ The core has three responsibilities:
 import { createAtrium } from "@atriumjs/core";
 
 const atrium = createAtrium({
-  authorize: async (req: Request) => {
-    /* return Principal or throw 401/403 */
+  authorize: async (input) => {
+    /* return Principal or throw 401/403 — input is AtriumHttpInput (Web-ish) */
   },
-  policies: { /* same shape as v0.1 */ },
+  policies: {
+    sessionTtlMs: 15 * 60_000,
+    idleTtlMs: 5 * 60_000,
+    maxConcurrentSessionsPerTenant: 5,
+    urlAllowlist: ["*"],
+    defaultViewport: { w: 1280, h: 800 },
+  },
   worker: {
     dialBase: process.env.ATRIUM_WORKER_DIAL_BASE!,
     sharedSecret: process.env.ATRIUM_WORKER_SECRET!,
   },
-  store: redisStore({ url: process.env.REDIS_URL }), // or memoryStore()
-  // transports: ["ws", "sse", "poll"]               // optional override; default = all
+  mountPath: "/atrium",
+  publicBaseUrl: "https://api.example.com", // optional; avoids trusting Host for viewer URLs
+  // transports: ["ws", "sse", "poll"] // optional; default = all three
 });
 
-// What the adapters use:
-atrium.handleRequest(request: Request): Promise<Response>
-atrium.handleUpgrade(request: Request, raw): Promise<UpgradeResult>
-atrium.handleSseConnect(request: Request): Promise<Response /* text/event-stream */>
-atrium.handlePoll(request: Request): Promise<Response>
+// Handlers adapters wire up:
+atrium.handleRequest(req: Request): Promise<Response>
+atrium.handleNodeViewerUpgrade(req, socket, head): void
+// HTTP streaming paths are routed via handleHttpInput (SSE/poll/input) from the same core object.
 ```
 
 Every adapter is a few dozen lines of glue. The hard work is in `@atriumjs/core`.
@@ -142,21 +148,18 @@ Adapters route incoming requests to these four. The core does not assume anythin
 ### 4.3 Session store interface
 
 ```ts
+// packages/core/src/session-store-types.ts — target shape for a shared store; not yet injected into createAtrium.
 export interface SessionStore {
   create(s: SessionRecord): Promise<void>;
   get(id: string): Promise<SessionRecord | null>;
   update(id: string, mut: Partial<SessionRecord>): Promise<void>;
   delete(id: string): Promise<void>;
-  // Pub/sub for control-state changes
-  subscribe(id: string, fn: (e: SessionEvent) => void): () => void;
-  publish(id: string, e: SessionEvent): Promise<void>;
+  subscribe(id: string, fn: (e: { type: string }) => void): () => void;
+  publish(id: string, e: { type: string }): Promise<void>;
 }
-
-export const memoryStore = (): SessionStore => /* ... */;
-export const redisStore = (cfg: { url: string }): SessionStore => /* ... */;
 ```
 
-`memoryStore` is the default and supports single-process deployments (incl. `npx atrium dev`). `redisStore` enables horizontal scale.
+Today **`MemorySessionStore`** is constructed inside `createAtrium` and exposed as **`atrium.memoryStore`** for tests and introspection only. A future Redis-backed `SessionStore` would replace that internal wiring.
 
 ---
 
@@ -176,19 +179,30 @@ All adapters ship with:
 ```ts
 import express from "express";
 import { createServer } from "node:http";
-import { createAtrium } from "@atriumjs/core";
-import { mountExpress } from "@atriumjs/express";
+import { atrium } from "@atriumjs/express";
 
-const atrium = createAtrium({ authorize, policies, worker });
 const app = express();
-const server = createServer(app);
+const { router, handleViewerUpgrade } = atrium({
+  authorize,
+  policies,
+  workerDialBase: process.env.ATRIUM_WORKER_DIAL_BASE!,
+  workerSharedSecret: process.env.ATRIUM_WORKER_SECRET!,
+  mountPath: "/atrium",
+  publicBaseUrl: process.env.PUBLIC_BASE_URL, // recommended behind proxies / multi-host
+});
 
-mountExpress(app, server, atrium, { path: "/atrium" });
+app.use("/atrium", router);
+
+const server = createServer(app);
+server.on("upgrade", (req, socket, head) => {
+  if (!req.url?.startsWith("/atrium/sessions/")) return;
+  handleViewerUpgrade(req, socket, head);
+});
 
 server.listen(3000);
 ```
 
-Internally `mountExpress` calls `app.use(path, expressAdapter(atrium))` and `server.on("upgrade", ...)`. SSE + polling work as normal Express handlers, so they're just registered routes.
+`atrium()` returns an Express **`Router`** plus **`handleViewerUpgrade`** for `http.Server` `"upgrade"` (viewer WebSocket only). JSON body parsing should be enabled on the router scope (the implementation attaches `express.json()` to the returned router).
 
 ### 5.2 `@atriumjs/fastify`
 
@@ -705,8 +719,15 @@ Estimated effort: 3–4 weeks of focused work for one engineer, or 2 weeks for t
 ### Express
 
 ```ts
-import { mountExpress } from "@atriumjs/express";
-mountExpress(app, server, atrium, { path: "/atrium" });
+import { atrium } from "@atriumjs/express";
+const { router, handleViewerUpgrade } = atrium({
+  /* AtriumConfig */
+});
+app.use("/atrium", router);
+server.on("upgrade", (req, socket, head) => {
+  if (!req.url?.startsWith("/atrium/sessions/")) return;
+  handleViewerUpgrade(req, socket, head);
+});
 ```
 
 ### Fastify
@@ -746,39 +767,39 @@ export class AppModule {}
 ## Appendix B — public demo deployment recipe (concise)
 
 ```ts
-// apps/demo-api/src/server.ts
+// Sketch: Express host + partial demoPolicies (see packages/core/src/policies-demo.ts for current fields).
 import express from "express";
 import { createServer } from "node:http";
-import { createAtrium, redisStore, demoPolicies } from "@atriumjs/core";
-import { mountExpress } from "@atriumjs/express";
+import { atrium } from "@atriumjs/express";
+import { demoPolicies } from "@atriumjs/core/policies";
 
-const atrium = createAtrium({
-  authorize: anonymousDemoUser({ trustProxyHeader: "cf-connecting-ip" }),
+const { router, handleViewerUpgrade } = atrium({
+  authorize: async (req) => {
+    /* e.g. anonymous demo principal from CF-Connecting-IP */
+    return { tenantId: "demo", userId: "anon" };
+  },
   policies: demoPolicies({
     perIp: { maxConcurrent: 1, maxPerHour: 3, cooldownSeconds: 90 },
-    fleet: { maxConcurrent: 50, maxPerHour: 500 },
-    perSession: { sessionTtlMs: 180_000, idleTtlMs: 45_000, memoryMb: 1024 },
-    urlAllowlist: ["https://x.com/i/flow/login", "https://x.com/home", "https://x.com/compose/*"],
-    captcha: {
-      provider: "turnstile",
-      siteKey: process.env.TURNSTILE_SITE_KEY!,
-      secret: process.env.TURNSTILE_SECRET!,
-    },
-    abuseSignals: { blockTorExitNodes: true, blockHeadless: true },
+    fleet: { maxConcurrent: 50 },
+    perSession: { sessionTtlMs: 180_000, idleTtlMs: 45_000 },
+    urlAllowlist: ["https://example.com/*"],
   }),
-  worker: {
-    dialBase: process.env.ATRIUM_WORKER_DIAL_BASE!,
-    sharedSecret: process.env.ATRIUM_WORKER_SECRET!,
-  },
-  store: redisStore({ url: process.env.REDIS_URL! }),
+  workerDialBase: process.env.ATRIUM_WORKER_DIAL_BASE!,
+  workerSharedSecret: process.env.ATRIUM_WORKER_SECRET!,
+  publicBaseUrl: process.env.PUBLIC_BASE_URL,
+  mountPath: "/atrium",
 });
 
 const app = express();
+app.use("/atrium", router);
 const server = createServer(app);
-mountExpress(app, server, atrium, { path: "/atrium" });
+server.on("upgrade", (req, socket, head) => {
+  if (!req.url?.startsWith("/atrium/sessions/")) return;
+  handleViewerUpgrade(req, socket, head);
+});
 server.listen(process.env.PORT || 3000);
 ```
 
-Pair with a Cloudflare-fronted DNS, Turnstile widget on the demo UI, and a Fly.io worker pool sized for ~50 concurrent sessions.
+Sessions stay in **API process memory** today; scale vertically or add a shared store later. Pair with a public **`publicBaseUrl`**, Turnstile on the UI (host responsibility), and a worker pool sized for expected concurrency. **`demoRateLimitPreCheck` / `demoRateLimitOnSessionCreated`** from `@atriumjs/core/policies` are optional HTTP hooks the host must call around session create/destroy if you want the in-memory counters to bite.
 
 ---

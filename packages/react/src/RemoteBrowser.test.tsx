@@ -1,7 +1,8 @@
 import "@testing-library/jest-dom/vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { createRef } from "react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { RemoteBrowser } from "./index.js";
+import { RemoteBrowser, type RemoteBrowserHandle } from "./index.js";
 
 type Listener = (ev: Event) => void;
 
@@ -170,6 +171,223 @@ describe("RemoteBrowser", () => {
     /** No buttons, no dialog — purely informational. */
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Sign in/ })).not.toBeInTheDocument();
+  });
+
+  it("calls onError when a malformed server message arrives", async () => {
+    const seen: unknown[] = [];
+    render(
+      <RemoteBrowser
+        sessionId="sid"
+        viewerToken="tok"
+        wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
+        onError={(e) => seen.push(e)}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeWebSocket.last).not.toBeNull();
+    });
+
+    act(() => {
+      FakeWebSocket.last!.dispatch(
+        "message",
+        new MessageEvent("message", { data: "{not valid json" }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(seen.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("imperative handle exposes navigate / back / forward / reload / control methods", async () => {
+    const ref = createRef<RemoteBrowserHandle>();
+    render(
+      <RemoteBrowser
+        ref={ref}
+        sessionId="sid"
+        viewerToken="tok"
+        wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeWebSocket.last).not.toBeNull();
+    });
+
+    const ws = FakeWebSocket.last!;
+    act(() => {
+      ref.current!.navigate("https://example.com/");
+      ref.current!.back();
+      ref.current!.forward();
+      ref.current!.reload();
+      ref.current!.requestControl();
+      ref.current!.releaseControl();
+    });
+
+    const sent = ws.sent.map((s) => JSON.parse(s) as { t: string; url?: string });
+    expect(sent).toEqual(
+      expect.arrayContaining([
+        { t: "navigate", url: "https://example.com/" },
+        { t: "back" },
+        { t: "forward" },
+        { t: "reload" },
+        { t: "request_control" },
+        { t: "release_control" },
+      ]),
+    );
+  });
+
+  it("renders an animated loading bar on { t: 'loading', loading: true }", async () => {
+    const { container } = render(
+      <RemoteBrowser
+        sessionId="sid"
+        viewerToken="tok"
+        wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeWebSocket.last).not.toBeNull();
+    });
+
+    expect(container.textContent).not.toMatch(/loading/i);
+
+    act(() => {
+      FakeWebSocket.last!.emitMessage({ t: "loading", loading: true });
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toMatch(/Loading/);
+    });
+  });
+
+  it("applies remote cursor to the canvas style", async () => {
+    const { container } = render(
+      <RemoteBrowser
+        sessionId="sid"
+        viewerToken="tok"
+        wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeWebSocket.last).not.toBeNull();
+    });
+
+    act(() => {
+      FakeWebSocket.last!.emitMessage({ t: "cursor", cursor: "text" });
+    });
+
+    await waitFor(() => {
+      const canvas = container.querySelector("canvas");
+      expect(canvas?.style.cursor).toBe("text");
+    });
+  });
+
+  it("prevents the native context menu on the canvas", async () => {
+    const { container } = render(
+      <RemoteBrowser
+        sessionId="sid"
+        viewerToken="tok"
+        wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
+        interactive
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeWebSocket.last).not.toBeNull();
+    });
+
+    // Promote to "human" so the input listeners attach.
+    act(() => {
+      FakeWebSocket.last!.emitMessage({ t: "control", holder: "human" });
+    });
+
+    const canvas = container.querySelector("canvas")!;
+    const ev = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    canvas.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+  });
+
+  it("forwards composition events as { t: 'ime' } messages", async () => {
+    const { container } = render(
+      <RemoteBrowser
+        sessionId="sid"
+        viewerToken="tok"
+        wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
+        interactive
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeWebSocket.last).not.toBeNull();
+    });
+
+    act(() => {
+      FakeWebSocket.last!.emitMessage({ t: "control", holder: "human" });
+    });
+
+    const ws = FakeWebSocket.last!;
+    const canvas = container.querySelector("canvas")!;
+
+    fireEvent.compositionStart(canvas, { data: "" });
+    fireEvent.compositionUpdate(canvas, { data: "あ" });
+    fireEvent.compositionEnd(canvas, { data: "あい" });
+
+    const ime = ws.sent
+      .map((s) => JSON.parse(s) as { t: string; text?: string; isComposing?: boolean })
+      .filter((m) => m.t === "ime");
+    expect(ime.length).toBe(3);
+    expect(ime[2]).toEqual({ t: "ime", text: "あい", isComposing: false });
+  });
+
+  it("flushes held modifiers on window blur", async () => {
+    const { container } = render(
+      <RemoteBrowser
+        sessionId="sid"
+        viewerToken="tok"
+        wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
+        interactive
+      />,
+    );
+
+    await waitFor(() => {
+      expect(FakeWebSocket.last).not.toBeNull();
+    });
+
+    act(() => {
+      FakeWebSocket.last!.emitMessage({ t: "control", holder: "human" });
+    });
+
+    // Force the input-listeners effect to attach (it requires a canvas).
+    expect(container.querySelector("canvas")).toBeTruthy();
+
+    const ws = FakeWebSocket.last!;
+    const before = ws.sent.length;
+
+    act(() => {
+      window.dispatchEvent(new Event("blur"));
+    });
+
+    const flushed = ws.sent
+      .slice(before)
+      .map((s) => JSON.parse(s) as { t: string; kind?: string; payload?: { code?: string } })
+      .filter((m) => m.t === "input" && m.kind === "key");
+
+    const codes = flushed.map((m) => m.payload?.code).sort();
+    expect(codes).toEqual(
+      [
+        "AltLeft",
+        "AltRight",
+        "ControlLeft",
+        "ControlRight",
+        "MetaLeft",
+        "MetaRight",
+        "ShiftLeft",
+        "ShiftRight",
+      ].sort(),
+    );
   });
 
   it("notifies onWebAuthnRequest and stays silent when webauthnNotice={false}", async () => {

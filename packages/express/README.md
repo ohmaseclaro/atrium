@@ -22,7 +22,6 @@ Full app walkthrough: [npm quick start](../../docs/quick-start.md).
 import { atrium } from "@atriumjs/express";
 
 const { router, handleViewerUpgrade } = atrium({
-  redis: { url: process.env.REDIS_URL! },
   authorize: async (req) => ({ tenantId: "…", userId: "…" }),
   policies: {
     sessionTtlMs: 15 * 60_000,

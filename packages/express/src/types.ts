@@ -13,6 +13,13 @@ export type AtriumPolicies = {
   maxConcurrentSessionsPerTenant: number;
   urlAllowlist: string[];
   defaultViewport: { w: number; h: number };
+  /**
+   * Ordered viewer transports advertised on `POST /sessions` (highest priority first).
+   * The dispatch handler picks the first entry the request can support and returns ONLY
+   * that transport in the response — advertising more than one would let a second viewer
+   * dial kick the first off the worker's single sink WebSocket. Defaults to `["ws"]`.
+   */
+  transports?: Array<"ws" | "sse" | "poll">;
 };
 
 export type AtriumHooks = {
@@ -26,14 +33,23 @@ export type AtriumHooks = {
 };
 
 export type AtriumConfig = {
-  /** Reserved for future Redis-backed features; optional today. */
-  redis?: { url: string };
   /** Host resolves identity for HTTP; WS viewer tokens are verified separately. */
   authorize: (req: Request) => Promise<Principal>;
   policies: AtriumPolicies;
   hooks?: AtriumHooks;
-  /** Advertised viewer transports (defaults to ws + sse + poll). */
+  /**
+   * Ordered viewer transports advertised on `POST /sessions` (highest priority first).
+   * The dispatch handler picks the first entry the request can support and returns ONLY
+   * that transport in the response. Defaults to `["ws"]`.
+   */
   transports?: Array<"ws" | "sse" | "poll">;
+  /**
+   * Public origin for viewer URLs on `POST /sessions` (e.g. `https://api.example.com`).
+   * When set, the `Host` header is not used for `wsUrl` / transport URLs (prevents Host forgery).
+   */
+  publicBaseUrl?: string;
+  /** Enables demo-only `POST .../x-demo/compose-tweet`. Off by default. */
+  enableDemoComposeRoutes?: boolean;
   /**
    * Base URL for the worker backplane, e.g. ws://127.0.0.1:7070.
    * The API opens outbound WebSockets to `${workerDialBase}/internal/stream/:sessionId` (dial pattern).
@@ -54,6 +70,10 @@ export type SessionRecord = {
   viewerToken: string;
   viewerTokenExpiresAt: number;
   createdAt: number;
+  /** Hard expiry; janitor destroys the session once `Date.now() > expiresAt`. */
+  expiresAt: number;
+  /** Updated on each replay append + per-session HTTP route call (idle TTL tracking). */
+  lastActivityAt: number;
   status: SessionStatus;
   control: { holder: ControlHolder; since: number };
   currentUrl: string;

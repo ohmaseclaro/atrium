@@ -39,6 +39,7 @@ const env = {
   ...process.env,
   ATRIUM_WORKER_PORT: String(port),
   ATRIUM_WORKER_DIAL_BASE: dialBase,
+  ATRIUM_X_DEMO_COMPOSE: process.env.ATRIUM_X_DEMO_COMPOSE ?? "1",
 };
 
 console.log(`[atrium-demo] worker port ${port}  dial ${dialBase}`);

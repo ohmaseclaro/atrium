@@ -7,4 +7,9 @@ export type {
   Principal,
   SessionRecord,
 } from "./types.js";
-export { urlAllowed, workerHttpBaseFromDial, workerInternalFetch } from "@atriumjs/core";
+export {
+  urlAllowed,
+  workerHttpBaseFromDial,
+  workerInternalFetch,
+  viewerStreamMatch,
+} from "@atriumjs/core";

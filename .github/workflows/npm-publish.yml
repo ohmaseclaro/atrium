@@ -1,19 +1,39 @@
-# Publishes public @atriumjs/* packages in dependency order.
+# Publishes public @atriumjs/* packages.
 # Configure repository secret NPM_TOKEN (see docs/npm-publishing.md).
+#
+# Two trigger paths are wired:
+#   1. Tag push (v*.*.*) or GitHub Release published — runs the Changesets-based
+#      `changeset publish` flow which reads `.changeset/*.md` entries, bumps
+#      versions, and publishes any package whose `version` is not yet on npm.
+#   2. `workflow_dispatch` — manual fallback that walks the packages in
+#      dependency order and runs `npm publish` directly. Useful when the
+#      changeset graph is empty but a re-publish is needed.
+#
+# Both paths require `id-token: write` so npm can attach a sigstore-backed
+# provenance attestation to each tarball.
 
 name: Publish to npm
 
 on:
+  push:
+    tags:
+      - "v*.*.*"
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  id-token: write
+  pull-requests: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
         with:
@@ -28,11 +48,25 @@ jobs:
       - name: Install and verify
         run: pnpm install --frozen-lockfile && pnpm publish:check
 
-      - name: Publish packages (order matters)
+      - name: Publish via Changesets (preferred)
+        if: github.event_name == 'push' || github.event_name == 'release'
+        uses: changesets/action@v1
+        with:
+          publish: pnpm exec changeset publish
+          # `version` intentionally omitted — version bumps land via the PR
+          # opened by the Changesets bot ahead of the tag push.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish packages directly (manual fallback)
+        if: github.event_name == 'workflow_dispatch'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
         run: |
           set -e
           for dir in packages/protocol packages/core packages/express packages/react packages/worker packages/cli; do
-            (cd "$dir" && npm publish --access public)
+            (cd "$dir" && npm publish --access public --provenance)
           done

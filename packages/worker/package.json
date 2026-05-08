@@ -30,7 +30,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -38,7 +39,8 @@
     "LICENSE"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "engines": {
     "node": ">=20"
@@ -48,18 +50,32 @@
     "lint": "pnpm run typecheck",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/run.js",
-    "start:xvfb": "xvfb-run -a --server-args='-screen 0 1920x1080x24 -ac' node dist/run.js"
+    "start:xvfb": "xvfb-run -a --server-args='-screen 0 1920x1080x24 -ac' node dist/run.js",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@atriumjs/protocol": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "peerDependencies": {
     "playwright": "^1.49.1",
     "playwright-extra": "^4.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "ws": "^8.18.0"
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  },
+  "peerDependenciesMeta": {
+    "playwright-extra": {
+      "optional": false
+    },
+    "puppeteer-extra-plugin-stealth": {
+      "optional": false
+    }
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/ws": "^8.5.13",
+    "playwright": "^1.49.1",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
   }

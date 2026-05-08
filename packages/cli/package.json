@@ -29,7 +29,8 @@
     "LICENSE"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "engines": {
     "node": ">=20"
@@ -37,7 +38,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "pnpm run typecheck",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {},
   "devDependencies": {

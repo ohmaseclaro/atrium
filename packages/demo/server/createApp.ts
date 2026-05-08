@@ -21,6 +21,10 @@ export function createAtriumDemoApp(): AtriumDemoApp {
 
   const { router, handleViewerUpgrade } = atrium({
     authorize: async (_req: Request) => ({ tenantId: "demo", userId: "demo-user" }),
+    ...(process.env.ATRIUM_PUBLIC_BASE_URL?.trim()
+      ? { publicBaseUrl: process.env.ATRIUM_PUBLIC_BASE_URL.trim() }
+      : {}),
+    enableDemoComposeRoutes: true,
     ...(process.env.ATRIUM_WORKER_TLS_INSECURE === "1"
       ? { workerTls: { rejectUnauthorized: false } }
       : {}),

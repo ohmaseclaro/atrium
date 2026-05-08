@@ -2,7 +2,13 @@ import type { ControlHolder } from "@atriumjs/protocol";
 import { sessionBootstrapBodySchema, sessionSnapshotApplyBodySchema } from "@atriumjs/protocol";
 import type { AtriumHttpInput } from "./http-input.js";
 import type { MemorySessionStore } from "./memory-session-store.js";
-import type { CreateAtriumConfig, AtriumPolicies, TransportOffer } from "./types.js";
+import type {
+  CreateAtriumConfig,
+  AtriumPolicies,
+  Principal,
+  SessionRecord,
+  TransportOffer,
+} from "./types.js";
 import { urlAllowed } from "./url-allowlist.js";
 import { workerInternalFetch } from "./worker-client.js";
 
@@ -15,7 +21,7 @@ export type DispatchCtx = {
   workerSharedSecret: string;
   workerTls?: { rejectUnauthorized?: boolean };
   mount: string;
-  /** e.g. https://host or http://host — used to build transport URLs */
+  /** Fallback request origin when `config.publicBaseUrl` is unset (local dev). */
   origin: string;
   transports: Array<"ws" | "sse" | "poll">;
 };
@@ -35,6 +41,24 @@ function text(status: number, body = ""): Response {
   return new Response(body, { status });
 }
 
+function requestOriginFallback(ctx: DispatchCtx): string {
+  const o = ctx.origin;
+  return o.startsWith("http://") || o.startsWith("https://") ? o : `http://${o}`;
+}
+
+/** Host + scheme for viewer URLs; prefers `config.publicBaseUrl` over request `Host` (anti-forgery). */
+function viewerPublicOrigin(ctx: DispatchCtx): URL {
+  const configured = ctx.config.publicBaseUrl?.trim();
+  if (configured) {
+    try {
+      return new URL(configured);
+    } catch {
+      /* fall through */
+    }
+  }
+  return new URL(requestOriginFallback(ctx));
+}
+
 function buildTransports(
   ctx: DispatchCtx,
   sessionId: string,
@@ -43,28 +67,52 @@ function buildTransports(
 ): TransportOffer[] {
   const base = `${proto}://${hostHeader}${ctx.mount}`;
   const wsProto = proto === "https" ? "wss" : "ws";
-  const out: TransportOffer[] = [];
-  for (const t of ctx.transports) {
-    if (t === "ws") {
-      out.push({
-        kind: "ws",
-        url: `${wsProto}://${hostHeader}${ctx.mount}/sessions/${sessionId}/stream`,
-      });
-    } else if (t === "sse") {
-      out.push({
+  // Fix 5: pick exactly ONE transport — the highest-priority entry that the host
+  // has configured. The worker has a single `sink.ws`, so advertising more than
+  // one would let a second viewer dial kick the first off. `policies.transports`
+  // overrides the host-level `config.transports` when set.
+  const ordered = ctx.policies.transports?.length ? ctx.policies.transports : ctx.transports;
+  const choice = ordered[0] ?? "ws";
+  if (choice === "sse") {
+    return [
+      {
         kind: "sse",
         framesUrl: `${base}/sessions/${sessionId}/stream/sse`,
         inputUrl: `${base}/sessions/${sessionId}/stream/input`,
-      });
-    } else if (t === "poll") {
-      out.push({
+      },
+    ];
+  }
+  if (choice === "poll") {
+    return [
+      {
         kind: "poll",
         url: `${base}/sessions/${sessionId}/stream/poll`,
         inputUrl: `${base}/sessions/${sessionId}/stream/input`,
-      });
-    }
+      },
+    ];
   }
-  return out;
+  return [
+    {
+      kind: "ws",
+      url: `${wsProto}://${hostHeader}${ctx.mount}/sessions/${sessionId}/stream`,
+    },
+  ];
+}
+
+/** Require authenticated principal and that they own this session (tenant + user). */
+async function authorizeOwnedSession(
+  ctx: DispatchCtx,
+  sessionId: string,
+): Promise<{ principal: Principal; rec: SessionRecord } | Response> {
+  const principal = await ctx.config.authorize(ctx.input);
+  const rec = ctx.store.getById(sessionId);
+  if (!rec) return json({ error: "session_not_found" }, 404);
+  if (rec.tenantId !== principal.tenantId || rec.userId !== principal.userId) {
+    return json({ error: "forbidden" }, 403);
+  }
+  // Fix 4: per-session HTTP routes count as activity for idleTtl tracking.
+  ctx.store.touch(sessionId);
+  return { principal, rec };
 }
 
 export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
@@ -80,6 +128,16 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
 
   if (input.method === "POST" && p === "/sessions") {
     const principal = await config.authorize(input);
+
+    // Fix 4: enforce maxConcurrentSessionsPerTenant before allocating anything.
+    const max = ctx.policies.maxConcurrentSessionsPerTenant;
+    if (Number.isFinite(max) && max > 0) {
+      const current = store.countByTenant(principal.tenantId);
+      if (current >= max) {
+        return json({ code: "max_concurrent", current, max }, 429);
+      }
+    }
+
     const body = await input.jsonBody();
     const parsed = sessionBootstrapBodySchema.safeParse(body ?? {});
     if (!parsed.success) {
@@ -87,6 +145,10 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
     }
     const b = parsed.data;
     const hasStorageState = b.storageState != null && typeof b.storageState === "object";
+    // Only call worker bootstrap when the client sent explicit bootstrap fields.
+    // Policy `defaultViewport` is merged into the payload when we bootstrap, but must
+    // not alone force bootstrap — otherwise POST {} always hits the worker (503 in tests / dev).
+    const effectiveViewport = b.viewport ?? ctx.policies.defaultViewport;
     const hasBootstrap =
       hasStorageState ||
       (b.cookies?.length ?? 0) > 0 ||
@@ -101,7 +163,7 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
       if (hasStorageState) payload.storageState = b.storageState;
       if (b.cookies !== undefined) payload.cookies = b.cookies;
       if (b.initialUrl !== undefined) payload.initialUrl = b.initialUrl;
-      if (b.viewport !== undefined) payload.viewport = b.viewport;
+      if (effectiveViewport !== undefined) payload.viewport = effectiveViewport;
       if (b.clientCertificates !== undefined) payload.clientCertificates = b.clientCertificates;
 
       const r = await workerInternalFetch(
@@ -120,8 +182,9 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
       }
     }
 
-    const hostHeader = input.headers.get("host") ?? "localhost";
-    const proto = ctx.origin.startsWith("https") ? "https" : "http";
+    const pub = viewerPublicOrigin(ctx);
+    const proto = pub.protocol === "https:" ? "https" : "http";
+    const hostHeader = pub.host;
     const wsProto = proto === "https" ? "wss" : "ws";
     const wsUrl = `${wsProto}://${hostHeader}${ctx.mount}/sessions/${record.sessionId}/stream`;
     const transports = buildTransports(ctx, record.sessionId, hostHeader, proto);
@@ -149,12 +212,11 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
   const mGetSession = /^\/sessions\/([^/]+)$/.exec(p);
   if (input.method === "GET" && mGetSession) {
     const id = decodeURIComponent(mGetSession[1]);
-    const rec = store.getById(id);
-    if (!rec) return json({ error: "session_not_found" }, 404);
+    const auth = await authorizeOwnedSession(ctx, id);
+    if (auth instanceof Response) return auth;
+    const { rec } = auth;
     return json({
       sessionId: rec.sessionId,
-      tenantId: rec.tenantId,
-      userId: rec.userId,
       createdAt: rec.createdAt,
       status: rec.status,
       control: rec.control,
@@ -164,10 +226,10 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
 
   const mDelSession = /^\/sessions\/([^/]+)$/.exec(p);
   if (input.method === "DELETE" && mDelSession) {
-    await config.authorize(input);
     const id = decodeURIComponent(mDelSession[1]);
-    const rec = store.getById(id);
-    if (!rec) return json({ error: "session_not_found" }, 404);
+    const auth = await authorizeOwnedSession(ctx, id);
+    if (auth instanceof Response) return auth;
+    const { rec } = auth;
     store.delete(rec.sessionId);
     void workerInternalFetch(
       ctx.workerDialBase,
@@ -181,10 +243,10 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
 
   const mControl = /^\/sessions\/([^/]+)\/control$/.exec(p);
   if (input.method === "POST" && mControl) {
-    await config.authorize(input);
     const id = decodeURIComponent(mControl[1]);
-    const rec = store.getById(id);
-    if (!rec) return json({ error: "session_not_found" }, 404);
+    const auth = await authorizeOwnedSession(ctx, id);
+    if (auth instanceof Response) return auth;
+    const { rec } = auth;
     const body = (await input.jsonBody()) as { action?: string; to?: ControlHolder };
     if (body?.action !== "grant" && body?.action !== "release") {
       return json({ error: "invalid_action" }, 400);
@@ -203,11 +265,10 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
   }
 
   const mXt = /^\/sessions\/([^/]+)\/x-demo\/compose-tweet$/.exec(p);
-  if (input.method === "POST" && mXt) {
-    await config.authorize(input);
+  if (ctx.config.enableDemoComposeRoutes === true && input.method === "POST" && mXt) {
     const id = decodeURIComponent(mXt[1]);
-    const rec = store.getById(id);
-    if (!rec) return json({ error: "session_not_found" }, 404);
+    const auth = await authorizeOwnedSession(ctx, id);
+    if (auth instanceof Response) return auth;
     const body = (await input.jsonBody()) as { text?: string };
     const textBody = body?.text;
     if (typeof textBody !== "string" || !textBody.trim()) {
@@ -218,7 +279,7 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
     const r = await workerInternalFetch(
       ctx.workerDialBase,
       ctx.workerSharedSecret,
-      `/internal/session/${encodeURIComponent(id)}/x-demo/compose-tweet`,
+      `/internal/session/${encodeURIComponent(auth.rec.sessionId)}/x-demo/compose-tweet`,
       { method: "POST", body: { text: trimmed } },
     );
     if (!r.ok) {
@@ -241,10 +302,10 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
 
   const mNav = /^\/sessions\/([^/]+)\/navigate$/.exec(p);
   if (input.method === "POST" && mNav) {
-    await config.authorize(input);
     const id = decodeURIComponent(mNav[1]);
-    const rec = store.getById(id);
-    if (!rec) return json({ error: "session_not_found" }, 404);
+    const auth = await authorizeOwnedSession(ctx, id);
+    if (auth instanceof Response) return auth;
+    const { rec } = auth;
     const body = (await input.jsonBody()) as { url?: string };
     const url = body?.url;
     if (!url || typeof url !== "string") return json({ error: "missing_url" }, 400);
@@ -267,10 +328,9 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
 
   const mCook = /^\/sessions\/([^/]+)\/cookies$/.exec(p);
   if (input.method === "GET" && mCook) {
-    await config.authorize(input);
     const id = decodeURIComponent(mCook[1]);
-    const rec = store.getById(id);
-    if (!rec) return json({ error: "session_not_found" }, 404);
+    const auth = await authorizeOwnedSession(ctx, id);
+    if (auth instanceof Response) return auth;
     const r = await workerInternalFetch(
       ctx.workerDialBase,
       ctx.workerSharedSecret,
@@ -284,10 +344,9 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
 
   const mStore = /^\/sessions\/([^/]+)\/storage-state$/.exec(p);
   if (input.method === "GET" && mStore) {
-    await config.authorize(input);
     const id = decodeURIComponent(mStore[1]);
-    const rec = store.getById(id);
-    if (!rec) return json({ error: "session_not_found" }, 404);
+    const auth = await authorizeOwnedSession(ctx, id);
+    if (auth instanceof Response) return auth;
     const r = await workerInternalFetch(
       ctx.workerDialBase,
       ctx.workerSharedSecret,
@@ -301,10 +360,9 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
 
   const mSnapGet = /^\/sessions\/([^/]+)\/session-snapshot$/.exec(p);
   if (input.method === "GET" && mSnapGet) {
-    await config.authorize(input);
     const id = decodeURIComponent(mSnapGet[1]);
-    const rec = store.getById(id);
-    if (!rec) return json({ error: "session_not_found" }, 404);
+    const auth = await authorizeOwnedSession(ctx, id);
+    if (auth instanceof Response) return auth;
     const base = `/internal/session/${encodeURIComponent(id)}`;
     const [rc, rs] = await Promise.all([
       workerInternalFetch(ctx.workerDialBase, ctx.workerSharedSecret, `${base}/cookies`),
@@ -319,10 +377,9 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
 
   const mSnapPost = /^\/sessions\/([^/]+)\/session-snapshot$/.exec(p);
   if (input.method === "POST" && mSnapPost) {
-    await config.authorize(input);
     const id = decodeURIComponent(mSnapPost[1]);
-    const rec = store.getById(id);
-    if (!rec) return json({ error: "session_not_found" }, 404);
+    const auth = await authorizeOwnedSession(ctx, id);
+    if (auth instanceof Response) return auth;
     const body = await input.jsonBody();
     const parsed = sessionSnapshotApplyBodySchema.safeParse(body ?? {});
     if (!parsed.success) {

@@ -136,3 +136,11 @@ git remote set-url origin https://github.com/ohmaseclaro/atrium.git
 To **rename** a repo you keep under the same owner: GitHub **Settings → General → Repository name**, or `gh repo rename <new-name> --repo <owner>/<current>`.
 
 To **move** to the `atriumjs` organization, use **Settings → Danger zone → Transfer ownership** (issues, PRs, and stars move with the repo). Prefer transfer over delete-and-recreate unless you intentionally want a clean slate.
+
+## Versioning with Changesets
+
+This repo includes [Changesets](https://github.com/changesets/changesets) (`.changeset/config.json`, `@changesets/cli`).
+
+1. After a meaningful change, run **`pnpm changeset`** (or `pnpm exec changeset`), pick the affected packages, and write a summary. That adds a markdown file under `.changeset/`.
+2. When you are ready to bump versions and refresh changelogs, run **`pnpm version-packages`** (`changeset version`). Commit the result.
+3. The existing **Publish to npm** workflow (manual `workflow_dispatch`) still runs **`npm publish`** per package in order; after versioning, tags and changelog entries align with the bumped `package.json` versions. You can later switch that workflow to `changeset publish` if you want a single publish step.

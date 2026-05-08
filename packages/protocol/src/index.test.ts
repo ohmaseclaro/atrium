@@ -40,6 +40,11 @@ describe("serverMessageSchema", () => {
     });
     expect(msg.mime).toBe("image/jpeg");
   });
+
+  it("parses pong", () => {
+    const msg = serverMessageSchema.parse({ t: "pong" });
+    expect(msg.t).toBe("pong");
+  });
 });
 
 describe("parseServerMessage", () => {
