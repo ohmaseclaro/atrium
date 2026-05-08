@@ -220,6 +220,56 @@ function mouseButtonFromPayload(v: unknown): "left" | "right" | "middle" {
   return "left";
 }
 
+const MAX_CLIPBOARD_CHARS = 200_000;
+
+async function readPageSelectionText(page: Page): Promise<string> {
+  try {
+    return await page.evaluate(() => {
+      const ae = document.activeElement;
+      if (!ae) return window.getSelection()?.toString() ?? "";
+      if (ae instanceof HTMLTextAreaElement || ae instanceof HTMLInputElement) {
+        const s = ae.selectionStart ?? 0;
+        const e = ae.selectionEnd ?? 0;
+        if (e > s) return ae.value.slice(s, e);
+        return "";
+      }
+      return window.getSelection()?.toString() ?? "";
+    });
+  } catch {
+    return "";
+  }
+}
+
+async function deletePageSelection(page: Page): Promise<void> {
+  try {
+    await page.evaluate(() => {
+      const ae = document.activeElement;
+      if (!ae) {
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed) sel.deleteFromDocument();
+        return;
+      }
+      if (ae instanceof HTMLTextAreaElement || ae instanceof HTMLInputElement) {
+        const s = ae.selectionStart ?? 0;
+        const e = ae.selectionEnd ?? 0;
+        if (e > s) {
+          const v = ae.value;
+          ae.value = v.slice(0, s) + v.slice(e);
+          ae.setSelectionRange(s, s);
+          ae.dispatchEvent(new Event("input", { bubbles: true }));
+          ae.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        return;
+      }
+      if (ae instanceof HTMLElement && ae.isContentEditable) {
+        document.execCommand?.("delete");
+      }
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 async function dispatchClientInput(live: LiveSession, msg: ClientMessage): Promise<void> {
   if (live.control.holder !== "human") return;
   const page = live.page;
@@ -245,6 +295,29 @@ async function dispatchClientInput(live: LiveSession, msg: ClientMessage): Promi
     const deltaX = Number(p.deltaX ?? 0);
     if (!Number.isFinite(deltaY) && !Number.isFinite(deltaX)) return;
     await page.mouse.wheel(deltaX || 0, deltaY || 0);
+    return;
+  }
+  if (msg.t === "input" && msg.kind === "clipboard") {
+    const p = msg.payload as { action?: unknown; text?: unknown };
+    const action = String(p.action ?? "");
+    if (action === "paste") {
+      const raw = typeof p.text === "string" ? p.text : "";
+      const text = raw.slice(0, MAX_CLIPBOARD_CHARS);
+      if (!text) return;
+      await page.keyboard.insertText(text);
+      return;
+    }
+    if (action === "copy") {
+      const text = (await readPageSelectionText(page)).slice(0, MAX_CLIPBOARD_CHARS);
+      if (text) sendJson(live.sink, { t: "clipboard", action: "copy", text });
+      return;
+    }
+    if (action === "cut") {
+      const text = (await readPageSelectionText(page)).slice(0, MAX_CLIPBOARD_CHARS);
+      if (text) sendJson(live.sink, { t: "clipboard", action: "cut", text });
+      await deletePageSelection(page);
+      return;
+    }
     return;
   }
   if (msg.t === "input" && msg.kind === "key") {

@@ -49,6 +49,16 @@ describe("parseServerMessage", () => {
 });
 
 describe("clientMessageSchema", () => {
+  it("parses clipboard input", () => {
+    const msg = clientMessageSchema.parse({
+      t: "input",
+      kind: "clipboard",
+      payload: { action: "paste", text: "hello" },
+    });
+    expect(msg.t).toBe("input");
+    if (msg.t === "input") expect(msg.kind).toBe("clipboard");
+  });
+
   it("parses ping", () => {
     expect(clientMessageSchema.parse({ t: "ping" }).t).toBe("ping");
   });
@@ -63,6 +73,17 @@ describe("clientMessageSchema", () => {
     expect(() =>
       clientMessageSchema.parse({ t: "webauthn_decision", id: "x", decision: "later" }),
     ).toThrow();
+  });
+});
+
+describe("serverMessageSchema (clipboard)", () => {
+  it("parses clipboard payload", () => {
+    const msg = serverMessageSchema.parse({
+      t: "clipboard",
+      action: "copy",
+      text: "remote selection",
+    });
+    expect(msg.t).toBe("clipboard");
   });
 });
 

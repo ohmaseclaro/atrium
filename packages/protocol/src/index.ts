@@ -81,13 +81,19 @@ export const serverMessageSchema = z.discriminatedUnion("t", [
     t: z.literal("bye"),
     reason: z.enum(["destroyed", "idle", "evicted", "error"]),
   }),
+  /** Worker → viewer: put remote page selection on the user’s local clipboard (copy / cut). */
+  z.object({
+    t: z.literal("clipboard"),
+    action: z.enum(["copy", "cut"]),
+    text: z.string(),
+  }),
 ]);
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 
 export const clientMessageSchema = z.union([
   z.object({
     t: z.literal("input"),
-    kind: z.enum(["mouse", "key", "wheel"]),
+    kind: z.enum(["mouse", "key", "wheel", "clipboard"]),
     payload: z.record(z.string(), z.unknown()),
   }),
   z.object({

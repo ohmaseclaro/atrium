@@ -219,6 +219,9 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
             setStatus("ended");
             onTerminatedRef.current?.(msg.reason);
           }
+          if (msg.t === "clipboard" && msg.text) {
+            void navigator.clipboard.writeText(msg.text).catch(() => undefined);
+          }
         } catch {
           /* ignore */
         }
@@ -324,9 +327,58 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
       });
     };
 
+    const maxClipboardChars = 200_000;
+    const sendPasteText = (text: string): void => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const t = text.slice(0, maxClipboardChars);
+      if (!t) return;
+      sendWs(ws, { t: "input", kind: "clipboard", payload: { action: "paste", text: t } });
+    };
+
+    const onPaste = (ev: Event): void => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const pev = ev as ClipboardEvent;
+      pev.preventDefault();
+      const fromEvent = pev.clipboardData?.getData("text/plain") ?? "";
+      if (fromEvent) {
+        sendPasteText(fromEvent);
+        return;
+      }
+      void navigator.clipboard.readText().then((t) => {
+        sendPasteText(t);
+      });
+    };
+
+    const accel = (ev: KeyboardEvent): boolean => ev.ctrlKey || ev.metaKey;
+    const isPasteChord = (ev: KeyboardEvent): boolean =>
+      accel(ev) && (ev.key === "v" || ev.key === "V");
+    const isCopyChord = (ev: KeyboardEvent): boolean =>
+      accel(ev) && (ev.key === "c" || ev.key === "C");
+    const isCutChord = (ev: KeyboardEvent): boolean =>
+      accel(ev) && (ev.key === "x" || ev.key === "X");
+
     const onKeyDown = (ev: KeyboardEvent): void => {
       if (ws.readyState !== WebSocket.OPEN) return;
       if (ev.target !== canvas) return;
+      if (isPasteChord(ev)) {
+        // Local clipboard is applied via the `paste` event (or readText fallback there).
+        return;
+      }
+      if (ev.key === "Insert" && ev.shiftKey) {
+        ev.preventDefault();
+        void navigator.clipboard.readText().then((t) => sendPasteText(t));
+        return;
+      }
+      if (isCopyChord(ev)) {
+        ev.preventDefault();
+        sendWs(ws, { t: "input", kind: "clipboard", payload: { action: "copy" } });
+        return;
+      }
+      if (isCutChord(ev)) {
+        ev.preventDefault();
+        sendWs(ws, { t: "input", kind: "clipboard", payload: { action: "cut" } });
+        return;
+      }
       ev.preventDefault();
       sendWs(ws, {
         t: "input",
@@ -337,6 +389,10 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
     const onKeyUp = (ev: KeyboardEvent): void => {
       if (ws.readyState !== WebSocket.OPEN) return;
       if (ev.target !== canvas) return;
+      if (isPasteChord(ev) || isCopyChord(ev) || isCutChord(ev)) {
+        ev.preventDefault();
+        return;
+      }
       ev.preventDefault();
       sendWs(ws, {
         t: "input",
@@ -349,6 +405,7 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
     canvas.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointermove", onPointerMove);
     canvas.addEventListener("wheel", onWheel, { passive: false });
+    canvas.addEventListener("paste", onPaste);
     canvas.addEventListener("keydown", onKeyDown);
     canvas.addEventListener("keyup", onKeyUp);
 
@@ -357,6 +414,7 @@ export function RemoteBrowser(props: RemoteBrowserProps): JSX.Element {
       canvas.removeEventListener("pointerup", onPointerUp);
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("wheel", onWheel);
+      canvas.removeEventListener("paste", onPaste);
       canvas.removeEventListener("keydown", onKeyDown);
       canvas.removeEventListener("keyup", onKeyUp);
     };
