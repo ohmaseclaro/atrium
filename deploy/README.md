@@ -18,7 +18,7 @@ There is **no Docker** requirement for the landing page or the demo Node process
    ```bash
    sudo mkdir -p /home/atrium
    sudo chown deploy:deploy /home/atrium
-   sudo -u deploy -H bash -lc 'git clone https://github.com/atriumjs/atrium.git /home/atrium'
+   sudo -u deploy -H bash -lc 'git clone https://github.com/ohmaseclaro/atrium.git /home/atrium'
    ```
 
    Use your real org/repo URL if different.

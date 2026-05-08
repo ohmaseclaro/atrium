@@ -127,10 +127,10 @@ pnpm exec atrium-worker
 
 ## GitHub repository URL
 
-`package.json` **repository**, **bugs**, and **homepage** fields assume **`https://github.com/atriumjs/atrium`**. After the repo exists under that URL, point your local clone at it:
+`package.json` **repository**, **bugs**, and **homepage** fields assume **`https://github.com/ohmaseclaro/atrium`**. After the repo exists under that URL, point your local clone at it:
 
 ```bash
-git remote set-url origin https://github.com/atriumjs/atrium.git
+git remote set-url origin https://github.com/ohmaseclaro/atrium.git
 ```
 
 To **rename** a repo you keep under the same owner: GitHub **Settings → General → Repository name**, or `gh repo rename <new-name> --repo <owner>/<current>`.

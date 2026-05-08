@@ -5,13 +5,13 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/atriumjs/atrium.git",
+    "url": "git+https://github.com/ohmaseclaro/atrium.git",
     "directory": "packages/worker"
   },
   "bugs": {
-    "url": "https://github.com/atriumjs/atrium/issues"
+    "url": "https://github.com/ohmaseclaro/atrium/issues"
   },
-  "homepage": "https://github.com/atriumjs/atrium/tree/main/packages/worker#readme",
+  "homepage": "https://github.com/ohmaseclaro/atrium/tree/main/packages/worker#readme",
   "keywords": [
     "atrium",
     "remote-browser",
