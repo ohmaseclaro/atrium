@@ -1,6 +1,6 @@
 {
   "name": "@atriumjs/worker",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Playwright-based browser worker with inbound WebSocket backplane (API dials in)",
   "license": "MIT",
   "repository": {

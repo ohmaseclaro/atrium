@@ -1,6 +1,6 @@
 {
   "name": "@atriumjs/react",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "React UI for embedding Atrium remote browser sessions",
   "license": "MIT",
   "repository": {

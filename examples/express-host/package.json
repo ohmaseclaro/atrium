@@ -1,7 +1,7 @@
 {
   "name": "@atriumjs/example-express-host",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
