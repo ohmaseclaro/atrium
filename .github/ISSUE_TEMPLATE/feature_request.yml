@@ -1,0 +1,77 @@
+name: Feature request
+description: Propose a change to Atrium's API, behavior, or scope.
+title: "[feat] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Atrium is intentionally narrow. The fastest path from "idea" to "merged" is to:
+
+        1. Read the v2 design doc — [`docs/atrium-v2-design.md`](https://github.com/ohmaseclaro/atrium/blob/main/docs/atrium-v2-design.md) — and confirm your idea isn't already on the roadmap (or rejected with a reason).
+        2. For wire-protocol or security-model changes, also read [`docs/remote-browser-design.md`](https://github.com/ohmaseclaro/atrium/blob/main/docs/remote-browser-design.md) §"Wire protocol" and §"Security model".
+        3. File this issue **before** writing a PR. We'd rather agree on shape early than reject working code.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem you're trying to solve?
+      description: |
+        Describe the use case, not the proposed solution. A good problem statement is one paragraph
+        and is convincing on its own merits to someone who's never seen your project.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed shape
+      description: |
+        What API / config / behavior do you want? A code sketch is great even if rough.
+        If you're proposing a new option on an existing surface, include the option name, type, default, and what it does.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface does this touch?
+      multiple: true
+      options:
+        - "@atriumjs/protocol (wire schemas)"
+        - "@atriumjs/core (engine + policies)"
+        - "@atriumjs/express (middleware)"
+        - "@atriumjs/worker (Chromium runtime)"
+        - "@atriumjs/react (<RemoteBrowser />)"
+        - "@atriumjs/cli (atrium doctor)"
+        - "deploy / infra (atriumjs.dev, demo)"
+        - "docs"
+        - "not sure yet"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: |
+        What other approaches did you try or rule out? Worker-side vs API-side, options vs new endpoint,
+        breaking vs additive — the trade-off you took is usually more informative than the answer itself.
+
+  - type: textarea
+    id: security
+    attributes:
+      label: Security implications
+      description: |
+        Does this change who can do what? Does it expose data that today is server-only? Does it widen the URL allowlist,
+        the worker secret surface, or the viewer-token capability?
+
+        For anything that touches credentials, cookies, `storageState`, or the control-handoff state machine,
+        we'd rather over-think than under-think. Write down the worst thing this could enable if abused.
+
+  - type: textarea
+    id: willingness
+    attributes:
+      label: Would you be willing to send the PR?
+      description: |
+        Totally optional — we'll often pick up the work either way. But "I can take a stab" makes prioritization easier.
