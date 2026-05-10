@@ -271,19 +271,26 @@
 
     <div class="wrap">
       <div class="hero">
-        <img
-          src="/img/landing-hero.png"
-          alt=""
-          aria-hidden="true"
-          style="
-            display: block;
-            width: 100%;
-            height: auto;
-            border-radius: 14px;
-            margin-bottom: 1.75rem;
-            border: 1px solid var(--border);
-          "
-        />
+        <picture>
+          <source type="image/webp" srcset="/img/landing-hero.webp" />
+          <img
+            src="/img/landing-hero.jpg"
+            alt=""
+            aria-hidden="true"
+            width="1920"
+            height="1072"
+            decoding="async"
+            fetchpriority="high"
+            style="
+              display: block;
+              width: 100%;
+              height: auto;
+              border-radius: 14px;
+              margin-bottom: 1.75rem;
+              border: 1px solid var(--border);
+            "
+          />
+        </picture>
         <span class="pill">Open source</span>
         <span class="pill">MIT</span>
         <span class="pill">Playwright</span>
