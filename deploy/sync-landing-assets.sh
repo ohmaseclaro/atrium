@@ -29,8 +29,11 @@ copy_if_exists() {
 
 echo "📦 Syncing landing assets into $LANDING_IMG_DIR"
 
-# Hero illustration on the landing page (atmospheric arch with receding depth).
-copy_if_exists "$BRAND_DIR/generated/landing-hero-v1.png" "$LANDING_IMG_DIR/landing-hero.png"
+# NOTE: deploy/landing/img/landing-hero.{jpg,webp} are pre-optimized derivatives
+# of assets/brand/generated/landing-hero-v1.png that ship in-tree (~30KB WebP +
+# ~60KB JPEG vs ~4MB master). To regenerate them when the brand asset changes,
+# run `node scripts/regenerate-brand-images.mjs` — that's a developer tool,
+# not a deploy step (the VPS doesn't need sharp installed).
 
 # Vector favicon — modern browsers prefer SVG when offered.
 copy_if_exists "$BRAND_DIR/favicon.svg" "$LANDING_IMG_DIR/favicon.svg"

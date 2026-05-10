@@ -34,6 +34,7 @@ export default tseslint.config(
       "packages/demo/server/**/*.ts",
       "packages/demo/vite.config.ts",
       "packages/demo/scripts/**/*.mjs",
+      "scripts/**/*.mjs",
       "vitest.config.ts",
       "**/*.test.ts",
     ],

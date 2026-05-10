@@ -1,7 +1,7 @@
 # Atrium
 
 <p align="center">
-  <img src="assets/brand/generated/readme-hero-v1.png" alt="Atrium — open-source remote browser for OAuth, MFA &amp; captcha handoff" width="100%"/>
+  <img src="assets/brand/readme-hero.jpg" alt="Atrium — open-source remote browser for OAuth, MFA &amp; captcha handoff" width="100%"/>
 </p>
 
 **Atrium** is an open-source toolkit for **remote Chromium sessions** where a host application can **hand control to a human** (OAuth, captchas, MFA), then resume automation and capture cookies or Playwright `storage_state` — without shipping raw CDP plumbing to your UI layer.
