@@ -218,5 +218,6 @@ MIT — see [`LICENSE`](LICENSE).
 Issues and PRs are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for local setup, the PR flow, and commit conventions. Read the [**user guide**](docs/user-guide.md) for how pieces fit together, and [`docs/remote-browser-design.md`](docs/remote-browser-design.md) before proposing protocol or security changes.
 
 - **Security report?** See [`SECURITY.md`](SECURITY.md) — do not open a public issue.
+- **Code of conduct**: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1.
 - **Release notes** live in [`CHANGELOG.md`](CHANGELOG.md); per-package detail in `packages/*/CHANGELOG.md`.
 - **Discussions** (questions, ideas, show-and-tell) are at https://github.com/ohmaseclaro/atrium/discussions.
