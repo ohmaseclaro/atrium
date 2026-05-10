@@ -1,7 +1,7 @@
 {
   "name": "@atriumjs/demo",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Full-stack demo: @atriumjs/express + @atriumjs/react + defaults (worker on 7070)",
   "type": "module",
   "scripts": {
