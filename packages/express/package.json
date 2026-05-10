@@ -44,7 +44,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "rimraf dist && tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
+    "clean": "rimraf dist",
     "lint": "pnpm run typecheck",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "pnpm run build"
