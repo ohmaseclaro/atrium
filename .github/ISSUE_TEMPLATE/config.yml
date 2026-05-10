@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / how do I…?
+    url: https://github.com/ohmaseclaro/atrium/discussions/categories/q-a
+    about: For setup, integration, and general usage questions. Issues are reserved for bugs and confirmed feature work.
+  - name: Idea / proposal (early-stage)
+    url: https://github.com/ohmaseclaro/atrium/discussions/categories/ideas
+    about: Floating an idea before it's a feature request. Great for "what if Atrium did X" conversations.
+  - name: Show & tell — built something with Atrium?
+    url: https://github.com/ohmaseclaro/atrium/discussions/categories/show-and-tell
+    about: Share what you're building. We may feature it on atriumjs.dev.
+  - name: Security report (do NOT open a public issue)
+    url: https://github.com/ohmaseclaro/atrium/security/advisories/new
+    about: Private vulnerability reports route here. See SECURITY.md for the full policy.

@@ -1,0 +1,114 @@
+name: Bug report
+description: Something in Atrium misbehaves. Use this for confirmed defects with a reproduction.
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Before you submit:
+
+        - For "how do I…?" questions, please open a [Discussion](https://github.com/ohmaseclaro/atrium/discussions) instead.
+        - For security issues, please follow [`SECURITY.md`](https://github.com/ohmaseclaro/atrium/blob/main/SECURITY.md) — do **not** open a public issue.
+        - For roadmap or wire-protocol ideas, open a Discussion or read [`docs/remote-browser-design.md`](https://github.com/ohmaseclaro/atrium/blob/main/docs/remote-browser-design.md) first.
+
+  - type: input
+    id: affected-package
+    attributes:
+      label: Affected package(s)
+      description: Which `@atriumjs/*` packages are involved? (e.g. `@atriumjs/express`, `@atriumjs/react`, `@atriumjs/worker`)
+      placeholder: "@atriumjs/express, @atriumjs/react"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `pnpm list @atriumjs/express @atriumjs/react @atriumjs/worker @atriumjs/core @atriumjs/protocol` (or `npm ls`).
+      placeholder: "@atriumjs/express@0.3.0, @atriumjs/react@0.3.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: One paragraph describing the bug. What did you expect, and what did you see instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: |
+        A short repro is the single biggest accelerator for a fix. Ideally:
+        - A link to a tiny repo or gist that reproduces, or
+        - A code snippet plus the exact command sequence, or
+        - The `curl` calls that trigger the bug at the HTTP layer.
+
+        Please trim it down — the closer to a 20-line repro, the faster we can fix.
+      placeholder: |
+        1. `pnpm install && pnpm demo`
+        2. Open http://127.0.0.1:3333 and click "Login and post"
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / error output
+      description: |
+        Worker logs, browser console errors, and the relevant Express request log lines.
+        Trim aggressively — paste only the lines around the failure, not the whole startup.
+      render: shell
+
+  - type: dropdown
+    id: environment-os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (x86_64)
+        - Linux (arm64)
+        - Windows
+        - Docker container
+        - Other / multiple
+    validations:
+      required: true
+
+  - type: input
+    id: environment-node
+    attributes:
+      label: Node version
+      description: Output of `node -v`.
+      placeholder: "v22.10.0"
+    validations:
+      required: true
+
+  - type: input
+    id: environment-pnpm
+    attributes:
+      label: pnpm version
+      description: Output of `pnpm -v`. Skip if you installed via npm/yarn only.
+      placeholder: "9.12.0"
+
+  - type: input
+    id: environment-playwright
+    attributes:
+      label: Playwright version
+      description: Output of `pnpm exec playwright --version`. Skip if you're only using `@atriumjs/react` against a remote worker.
+      placeholder: "Version 1.50.0"
+
+  - type: checkboxes
+    id: pre-flight
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues and Discussions and didn't find a duplicate.
+          required: true
+        - label: I'm on the latest minor of the affected `@atriumjs/*` package(s) (or have a reason not to be — please mention).
+          required: true
