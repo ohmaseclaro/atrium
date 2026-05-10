@@ -4,7 +4,18 @@
   <img src="assets/brand/readme-hero.jpg" alt="Atrium — open-source remote browser for OAuth, MFA &amp; captcha handoff" width="100%"/>
 </p>
 
+<p align="center">
+  <a href="https://github.com/ohmaseclaro/atrium/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ohmaseclaro/atrium/actions/workflows/ci.yml/badge.svg?branch=main"/></a>
+  <a href="https://www.npmjs.com/package/@atriumjs/express"><img alt="@atriumjs/express on npm" src="https://img.shields.io/npm/v/@atriumjs/express?label=%40atriumjs%2Fexpress&color=22d3ee"/></a>
+  <a href="https://www.npmjs.com/package/@atriumjs/react"><img alt="@atriumjs/react on npm" src="https://img.shields.io/npm/v/@atriumjs/react?label=%40atriumjs%2Freact&color=22d3ee"/></a>
+  <a href="https://www.npmjs.com/package/@atriumjs/worker"><img alt="@atriumjs/worker on npm" src="https://img.shields.io/npm/v/@atriumjs/worker?label=%40atriumjs%2Fworker&color=22d3ee"/></a>
+  <a href="LICENSE"><img alt="MIT licensed" src="https://img.shields.io/github/license/ohmaseclaro/atrium?color=22d3ee"/></a>
+  <a href="https://github.com/ohmaseclaro/atrium/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/ohmaseclaro/atrium?style=flat&color=22d3ee"/></a>
+</p>
+
 **Atrium** is an open-source toolkit for **remote Chromium sessions** where a host application can **hand control to a human** (OAuth, captchas, MFA), then resume automation and capture cookies or Playwright `storage_state` — without shipping raw CDP plumbing to your UI layer.
+
+> **Try it now:** [atriumjs.dev](https://atriumjs.dev) · live demo at [demo.atriumjs.dev](https://demo.atriumjs.dev) (rate-limited, locked to the X login flow).
 
 This repository is a **pnpm monorepo** (`packages/*`) implementing the architecture described in [`docs/remote-browser-design.md`](docs/remote-browser-design.md).
 
@@ -204,4 +215,8 @@ MIT — see [`LICENSE`](LICENSE).
 
 ## Contributing
 
-Issues and PRs are welcome. Read the [**user guide**](docs/user-guide.md) for how pieces fit together, and [`docs/remote-browser-design.md`](docs/remote-browser-design.md) before proposing protocol or security changes.
+Issues and PRs are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for local setup, the PR flow, and commit conventions. Read the [**user guide**](docs/user-guide.md) for how pieces fit together, and [`docs/remote-browser-design.md`](docs/remote-browser-design.md) before proposing protocol or security changes.
+
+- **Security report?** See [`SECURITY.md`](SECURITY.md) — do not open a public issue.
+- **Release notes** live in [`CHANGELOG.md`](CHANGELOG.md); per-package detail in `packages/*/CHANGELOG.md`.
+- **Discussions** (questions, ideas, show-and-tell) are at https://github.com/ohmaseclaro/atrium/discussions.
