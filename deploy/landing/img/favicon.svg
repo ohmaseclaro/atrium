@@ -1,0 +1,16 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Favicon: simplified mark optimized for 16×16 / 32×32 rendering.
+    Heavier strokes, less geometric detail, tuned to read at tab-size.
+  -->
+  <rect width="32" height="32" rx="6" fill="#0b0d12"/>
+  <path
+    d="M7 26 V16 C7 10.477 11.477 6 17 6 C22.523 6 27 10.477 27 16 V26"
+    stroke="#22d3ee"
+    stroke-width="3.5"
+    fill="none"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    transform="translate(-1,0)"
+  />
+</svg>
