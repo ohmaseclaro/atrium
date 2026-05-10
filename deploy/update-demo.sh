@@ -59,6 +59,16 @@ pnpm install --frozen-lockfile
 echo "🔨 pnpm build (workspace)..."
 pnpm build
 
+# Sync brand assets into deploy/landing/img/ so nginx serves the hero,
+# favicon, and OG card from /img/*. Idempotent; runs on every deploy.
+if [ -x "$ATRIUM_ROOT/deploy/sync-landing-assets.sh" ]; then
+  echo "🎨 Syncing landing brand assets..."
+  "$ATRIUM_ROOT/deploy/sync-landing-assets.sh"
+elif [ -f "$ATRIUM_ROOT/deploy/sync-landing-assets.sh" ]; then
+  echo "🎨 Syncing landing brand assets..."
+  bash "$ATRIUM_ROOT/deploy/sync-landing-assets.sh"
+fi
+
 # --- Playwright worker (Docker) — demo POST /atrium/sessions bootstraps via HTTP to :7070 ---
 WORKER_COMPOSE="$ATRIUM_ROOT/deploy/docker-compose.worker.yml"
 

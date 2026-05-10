@@ -1,0 +1,21 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Atrium mark">
+  <title>Atrium</title>
+  <!-- Dark variant for light backgrounds (GitHub README, light docs sites). -->
+  <path
+    d="M12 56 V32 C12 20.954 20.954 12 32 12 C43.046 12 52 20.954 52 32 V56"
+    stroke="#0b0d12"
+    stroke-width="6"
+    fill="none"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <line
+    x1="9"
+    y1="56"
+    x2="55"
+    y2="56"
+    stroke="#0b0d12"
+    stroke-width="6"
+    stroke-linecap="round"
+  />
+</svg>
