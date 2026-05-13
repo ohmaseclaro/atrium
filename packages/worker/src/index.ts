@@ -291,12 +291,22 @@ async function waitForXPostConfirmation(
     editorLocator
       .first()
       .waitFor({ state: "hidden", timeout: timeoutMs })
-      .then(() => finish(), () => { /* handled by poller timeout */ });
+      .then(
+        () => finish(),
+        () => {
+          /* handled by poller timeout */
+        },
+      );
 
     // ── success: URL leaves /compose ─────────────────────────────
     page
       .waitForURL((u: URL) => !u.pathname.startsWith("/compose"), { timeout: timeoutMs })
-      .then(() => finish(), () => { /* handled by poller timeout */ });
+      .then(
+        () => finish(),
+        () => {
+          /* handled by poller timeout */
+        },
+      );
 
     // ── failure poller ────────────────────────────────────────────
     void (async () => {
@@ -328,10 +338,7 @@ async function waitForXPostConfirmation(
           finish(new XComposeError("x_rate_limited", `Rate limited: ${toast}`));
         } else {
           finish(
-            new XComposeError(
-              "x_timeout",
-              `Post not confirmed within ${timeoutMs}ms. URL: ${url}`,
-            ),
+            new XComposeError("x_timeout", `Post not confirmed within ${timeoutMs}ms. URL: ${url}`),
           );
         }
       }

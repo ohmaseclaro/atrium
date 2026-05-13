@@ -27,15 +27,13 @@ const X_ERROR_COPY: Record<XErrorCode, string> = {
   x_session_expired:
     "Your X session expired before the tweet could be sent. Please try the flow again.",
   x_challenge_required:
-    "X asked for extra verification mid-flow. Refresh and try again - complete any challenge before clicking \"I’m logged in\".",
+    'X asked for extra verification mid-flow. Refresh and try again - complete any challenge before clicking "I’m logged in".',
   x_rate_limited: "X rate-limited this post. Wait a minute, then try again.",
   x_post_failed: "X rejected the post. The tweet may be a duplicate or contain blocked content.",
   x_timeout:
     "The tweet timed out waiting for confirmation from X. It may or may not have been sent - check your profile.",
-  x_compose_failed:
-    "The automation could not complete the tweet. Please try again.",
-  worker_x_compose_failed:
-    "The automation could not complete the tweet. Please try again.",
+  x_compose_failed: "The automation could not complete the tweet. Please try again.",
+  worker_x_compose_failed: "The automation could not complete the tweet. Please try again.",
 };
 
 function friendlyError(raw: unknown): string {
@@ -47,11 +45,7 @@ function friendlyError(raw: unknown): string {
 }
 
 /** Wraps a fetch with an AbortController timeout. */
-function fetchWithTimeout(
-  input: string,
-  init: RequestInit,
-  timeoutMs: number,
-): Promise<Response> {
+function fetchWithTimeout(input: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const ctrl = new AbortController();
   const id = setTimeout(() => ctrl.abort(), timeoutMs);
   return fetch(input, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(id));
@@ -202,7 +196,8 @@ export function App(): JSX.Element {
         );
         if (!res.ok) {
           const body = await res.text();
-          if (res.status === 429) throw new Error("Too many sessions open - please wait a moment and try again.");
+          if (res.status === 429)
+            throw new Error("Too many sessions open - please wait a moment and try again.");
           throw new Error(`HTTP ${res.status}: ${body}`);
         }
         const data = (await res.json()) as SessionPayload;
@@ -236,9 +231,7 @@ export function App(): JSX.Element {
       );
       const snapText = await snap.text();
       if (!snap.ok) {
-        throw new Error(
-          `Session snapshot failed: HTTP ${snap.status}: ${snapText.slice(0, 800)}`,
-        );
+        throw new Error(`Session snapshot failed: HTTP ${snap.status}: ${snapText.slice(0, 800)}`);
       }
 
       setPhase("posting");
@@ -264,7 +257,8 @@ export function App(): JSX.Element {
           /* non-JSON body - fall through */
         }
         const syntheticErr = new Error(errorCode ?? "compose_failed");
-        if (errorMessage) syntheticErr.message = `${errorCode ?? "compose_failed"}: ${errorMessage}`;
+        if (errorMessage)
+          syntheticErr.message = `${errorCode ?? "compose_failed"}: ${errorMessage}`;
         throw syntheticErr;
       }
       setPhase("done");
@@ -572,7 +566,11 @@ export function App(): JSX.Element {
                   color: "#0f172a",
                 }}
               >
-                {busyPost ? "Working…" : error ? "Retry - post my tweet" : "I'm logged in - post my tweet"}
+                {busyPost
+                  ? "Working…"
+                  : error
+                    ? "Retry - post my tweet"
+                    : "I'm logged in - post my tweet"}
               </button>
             ) : null}
 

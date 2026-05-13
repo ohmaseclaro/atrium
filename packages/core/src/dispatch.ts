@@ -292,7 +292,10 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
         if (typeof body.error === "string" && body.error) errorCode = body.error;
         if (typeof body.message === "string") errorMessage = body.message;
       } catch {
-        errorMessage = await r.text().catch(() => "").then((t) => t.slice(0, 2000));
+        errorMessage = await r
+          .text()
+          .catch(() => "")
+          .then((t) => t.slice(0, 2000));
       }
       const statusCode =
         r.status === 404

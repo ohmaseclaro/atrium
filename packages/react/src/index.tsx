@@ -435,7 +435,7 @@ export const RemoteBrowser = forwardRef<RemoteBrowserHandle, RemoteBrowserProps>
           connectRef.current();
         }, delay);
       });
-    }, [props.viewerToken, props.wsUrl]);
+    }, [props.viewerToken, props.wsUrl, setStatusAndNotify]);
 
     useEffect(() => {
       connectRef.current = connect;
@@ -935,7 +935,7 @@ export const RemoteBrowser = forwardRef<RemoteBrowserHandle, RemoteBrowserProps>
               Reconnecting…
             </div>
           ) : null}
-          {(props.connectingOverlay !== "none") &&
+          {props.connectingOverlay !== "none" &&
           (status === "connecting" || status === "idle" || (status === "live" && !firstFrame)) ? (
             <div
               role="status"
