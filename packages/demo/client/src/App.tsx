@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { RemoteBrowser } from "@atriumjs/react";
 
-const DEFAULT_TWEET = "Hello from Atrium X demo — automated post after login.";
+const DEFAULT_TWEET = "Hello from Atrium X demo - automated post after login.";
 
 type SessionPayload = {
   sessionId: string;
@@ -13,10 +13,55 @@ type SessionPayload = {
 
 type FlowPhase = "tweet" | "starting" | "login" | "posting" | "done";
 
+/** Typed error codes the server can return for compose failures. */
+type XErrorCode =
+  | "x_session_expired"
+  | "x_challenge_required"
+  | "x_rate_limited"
+  | "x_post_failed"
+  | "x_timeout"
+  | "x_compose_failed"
+  | "worker_x_compose_failed";
+
+const X_ERROR_COPY: Record<XErrorCode, string> = {
+  x_session_expired:
+    "Your X session expired before the tweet could be sent. Please try the flow again.",
+  x_challenge_required:
+    "X asked for extra verification mid-flow. Refresh and try again - complete any challenge before clicking \"I’m logged in\".",
+  x_rate_limited: "X rate-limited this post. Wait a minute, then try again.",
+  x_post_failed: "X rejected the post. The tweet may be a duplicate or contain blocked content.",
+  x_timeout:
+    "The tweet timed out waiting for confirmation from X. It may or may not have been sent - check your profile.",
+  x_compose_failed:
+    "The automation could not complete the tweet. Please try again.",
+  worker_x_compose_failed:
+    "The automation could not complete the tweet. Please try again.",
+};
+
+function friendlyError(raw: unknown): string {
+  if (!(raw instanceof Error)) return "Unknown error";
+  for (const [code, copy] of Object.entries(X_ERROR_COPY) as [XErrorCode, string][]) {
+    if (raw.message.includes(code)) return copy;
+  }
+  return raw.message;
+}
+
+/** Wraps a fetch with an AbortController timeout. */
+function fetchWithTimeout(
+  input: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), timeoutMs);
+  return fetch(input, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(id));
+}
+
 export function App(): JSX.Element {
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<SessionPayload | null>(null);
   const flowActiveRef = useRef(false);
+  const startGuardRef = useRef(false); // prevents double-click race on the start button
 
   const [flowOpen, setFlowOpen] = useState(false);
   const [phase, setPhase] = useState<FlowPhase>("tweet");
@@ -25,6 +70,10 @@ export function App(): JSX.Element {
   const [busyStart, setBusyStart] = useState(false);
   const [busyPost, setBusyPost] = useState(false);
   const [tweetDraft, setTweetDraft] = useState(DEFAULT_TWEET);
+  /** Shadow of RemoteBrowser's internal status - used for stage-aware copy. */
+  const [browserStatus, setBrowserStatus] = useState<
+    "idle" | "connecting" | "live" | "reconnecting" | "ended"
+  >("idle");
 
   useEffect(() => {
     sessionRef.current = session;
@@ -38,20 +87,27 @@ export function App(): JSX.Element {
     }
   }, []);
 
-  const leaveFlow = useCallback(async () => {
-    flowActiveRef.current = false;
-    const s = sessionRef.current;
-    sessionRef.current = null;
-    if (document.fullscreenElement) {
-      await document.exitFullscreen?.().catch(() => undefined);
-    }
-    if (s) await destroySession(s);
-    setSession(null);
-    setFlowOpen(false);
-    setPhase("tweet");
-    setError(null);
-  }, [destroySession]);
+  /** Clean up the flow. Pass `preserveError: true` to keep the current error visible. */
+  const leaveFlow = useCallback(
+    async (opts?: { preserveError?: boolean }) => {
+      flowActiveRef.current = false;
+      startGuardRef.current = false;
+      const s = sessionRef.current;
+      sessionRef.current = null;
+      if (document.fullscreenElement) {
+        await document.exitFullscreen?.().catch(() => undefined);
+      }
+      if (s) await destroySession(s);
+      setSession(null);
+      setFlowOpen(false);
+      setPhase("tweet");
+      setBrowserStatus("idle");
+      if (!opts?.preserveError) setError(null);
+    },
+    [destroySession],
+  );
 
+  // Exit fullscreen = leave flow (only while flow is active)
   useEffect(() => {
     const onFsChange = () => {
       if (document.fullscreenElement != null) return;
@@ -63,18 +119,37 @@ export function App(): JSX.Element {
       setSession(null);
       setFlowOpen(false);
       setPhase("tweet");
+      setBrowserStatus("idle");
       setError(null);
     };
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, [destroySession]);
 
+  // Best-effort session cleanup on page unload
+  useEffect(() => {
+    const onPageHide = () => {
+      const s = sessionRef.current;
+      if (!s) return;
+      fetch(`/atrium/sessions/${s.sessionId}`, {
+        method: "DELETE",
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, []);
+
   const grantHuman = useCallback(async (s: SessionPayload) => {
-    const res = await fetch(`/atrium/sessions/${s.sessionId}/control`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "grant", to: "human" }),
-    });
+    const res = await fetchWithTimeout(
+      `/atrium/sessions/${s.sessionId}/control`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "grant", to: "human" }),
+      },
+      10_000,
+    );
     if (!res.ok) {
       const t = await res.text();
       throw new Error(`Grant control failed: HTTP ${res.status}: ${t}`);
@@ -82,11 +157,15 @@ export function App(): JSX.Element {
   }, []);
 
   const releaseAgent = useCallback(async (s: SessionPayload) => {
-    const res = await fetch(`/atrium/sessions/${s.sessionId}/control`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "release" }),
-    });
+    const res = await fetchWithTimeout(
+      `/atrium/sessions/${s.sessionId}/control`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "release" }),
+      },
+      10_000,
+    );
     if (!res.ok) {
       const t = await res.text();
       throw new Error(`Return control failed: HTTP ${res.status}: ${t}`);
@@ -94,6 +173,10 @@ export function App(): JSX.Element {
   }, []);
 
   const loginAndPost = useCallback(() => {
+    // Guard against double-click or rapid re-entry
+    if (startGuardRef.current || flowActiveRef.current) return;
+    startGuardRef.current = true;
+
     setError(null);
     flowActiveRef.current = true;
     flushSync(() => {
@@ -108,13 +191,18 @@ export function App(): JSX.Element {
     void (async () => {
       setBusyStart(true);
       try {
-        const res = await fetch("/atrium/sessions", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ initialUrl: "https://x.com/i/flow/login" }),
-        });
+        const res = await fetchWithTimeout(
+          "/atrium/sessions",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ initialUrl: "https://x.com/i/flow/login" }),
+          },
+          15_000,
+        );
         if (!res.ok) {
           const body = await res.text();
+          if (res.status === 429) throw new Error("Too many sessions open - please wait a moment and try again.");
           throw new Error(`HTTP ${res.status}: ${body}`);
         }
         const data = (await res.json()) as SessionPayload;
@@ -122,10 +210,15 @@ export function App(): JSX.Element {
         await grantHuman(data);
         setPhase("login");
       } catch (e) {
-        setError(e instanceof Error ? e.message : "start_failed");
-        await leaveFlow();
+        const msg =
+          e instanceof Error && e.name === "AbortError"
+            ? "Timed out while starting the remote browser - please try again."
+            : friendlyError(e);
+        setError(msg);
+        await leaveFlow({ preserveError: true });
       } finally {
         setBusyStart(false);
+        startGuardRef.current = false;
       }
     })();
   }, [grantHuman, leaveFlow]);
@@ -136,44 +229,76 @@ export function App(): JSX.Element {
     setBusyPost(true);
     setError(null);
     try {
-      const snap = await fetch(`/atrium/sessions/${s.sessionId}/session-snapshot`);
+      const snap = await fetchWithTimeout(
+        `/atrium/sessions/${s.sessionId}/session-snapshot`,
+        {},
+        15_000,
+      );
       const snapText = await snap.text();
       if (!snap.ok) {
-        throw new Error(`Session snapshot failed: HTTP ${snap.status}: ${snapText.slice(0, 800)}`);
+        throw new Error(
+          `Session snapshot failed: HTTP ${snap.status}: ${snapText.slice(0, 800)}`,
+        );
       }
 
       setPhase("posting");
       await releaseAgent(s);
 
-      const compose = await fetch(`/atrium/sessions/${s.sessionId}/x-demo/compose-tweet`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: tweetDraft.trim() || DEFAULT_TWEET }),
-      });
+      const compose = await fetchWithTimeout(
+        `/atrium/sessions/${s.sessionId}/x-demo/compose-tweet`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: tweetDraft.trim() || DEFAULT_TWEET }),
+        },
+        75_000, // generous: worker has a 30s post-confirmation timeout internally
+      );
       if (!compose.ok) {
-        const t = await compose.text();
-        throw new Error(`Compose tweet failed: HTTP ${compose.status}: ${t}`);
+        let errorCode: string | undefined;
+        let errorMessage: string | undefined;
+        try {
+          const body = (await compose.json()) as { error?: string; message?: string };
+          errorCode = body.error;
+          errorMessage = body.message;
+        } catch {
+          /* non-JSON body - fall through */
+        }
+        const syntheticErr = new Error(errorCode ?? "compose_failed");
+        if (errorMessage) syntheticErr.message = `${errorCode ?? "compose_failed"}: ${errorMessage}`;
+        throw syntheticErr;
       }
       setPhase("done");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "post_failed");
+      const msg =
+        e instanceof Error && e.name === "AbortError"
+          ? "Timed out waiting for the tweet to be sent - check your X profile to see if it went through."
+          : friendlyError(e);
+      setError(msg);
+      // Keep the modal open so the user can retry or close manually
+      setPhase("login");
     } finally {
       setBusyPost(false);
     }
   }, [releaseAgent, tweetDraft]);
 
+  // ── floating hint copy ──────────────────────────────────────────────────────
   const floatingHint = (() => {
     if (phase === "starting" || busyStart) {
-      return "Starting a secure remote browser on X…";
+      if (browserStatus === "live") return "Loading X - almost there…";
+      if (browserStatus === "connecting") return "Connecting to your remote browser…";
+      return "Allocating a remote browser…";
     }
     if (phase === "login") {
-      return "Sign in on the page below. Passkeys are not supported — use password or code.";
+      return (
+        "Sign in on the page below - use password or a one-time code." +
+        " X may ask for extra verification (email/SMS code, captcha): that's normal, just complete it."
+      );
     }
     if (phase === "posting") {
-      return "Watch the remote browser — your tweet is being sent.";
+      return "Watch the remote browser - your tweet is being sent…";
     }
     if (phase === "done") {
-      return "Your tweet was sent from the remote session.";
+      return "Your tweet was sent from the remote session. 🎉";
     }
     return "";
   })();
@@ -322,12 +447,15 @@ export function App(): JSX.Element {
                 showSessionStatus={false}
                 interactive
                 webauthnNotice
+                connectingOverlay="none" // demo owns the loading state via onStatusChange
+                onStatusChange={setBrowserStatus}
                 onExitFullScreen={() => void leaveFlow()}
                 onTerminated={() => void leaveFlow()}
                 style={{ flex: 1, minHeight: 0 }}
               />
             </div>
           ) : (
+            // Session not yet allocated - show a spinner while POST /atrium/sessions is in-flight
             <div
               style={{
                 flex: 1,
@@ -355,6 +483,43 @@ export function App(): JSX.Element {
             </div>
           )}
 
+          {/* Phase-aware overlay when session is allocated but browser is still warming up */}
+          {session &&
+          (browserStatus === "connecting" ||
+            browserStatus === "idle" ||
+            (browserStatus === "live" && phase === "starting")) ? (
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 1050,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 16,
+                background: "#020617",
+                color: "#94a3b8",
+                fontSize: 15,
+              }}
+            >
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: "50%",
+                  border: "3px solid rgba(148,163,184,0.25)",
+                  borderTopColor: "#38bdf8",
+                  animation: "atrium-spin 0.9s linear infinite",
+                }}
+              />
+              <p style={{ margin: 0 }}>
+                {browserStatus === "live" ? "Loading X…" : "Connecting to remote browser…"}
+              </p>
+            </div>
+          ) : null}
+
+          {/* Floating control strip at the bottom */}
           <div
             style={{
               position: "fixed",
@@ -362,7 +527,7 @@ export function App(): JSX.Element {
               bottom: 28,
               transform: "translateX(-50%)",
               zIndex: 1100,
-              width: "min(420px, calc(100vw - 32px))",
+              width: "min(480px, calc(100vw - 32px))",
               borderRadius: 16,
               padding: "16px 18px",
               boxSizing: "border-box",
@@ -375,6 +540,21 @@ export function App(): JSX.Element {
             <p style={{ margin: "0 0 12px", fontSize: 13, lineHeight: 1.5, color: "#e2e8f0" }}>
               {floatingHint}
             </p>
+
+            {error && (phase === "login" || phase === "posting") ? (
+              <p
+                role="alert"
+                style={{
+                  margin: "0 0 12px",
+                  fontSize: 13,
+                  color: "#fca5a5",
+                  lineHeight: 1.45,
+                }}
+              >
+                {error}
+              </p>
+            ) : null}
+
             {phase === "login" ? (
               <button
                 type="button"
@@ -392,9 +572,10 @@ export function App(): JSX.Element {
                   color: "#0f172a",
                 }}
               >
-                {busyPost ? "Working…" : "I’m logged in — post my tweet"}
+                {busyPost ? "Working…" : error ? "Retry - post my tweet" : "I'm logged in - post my tweet"}
               </button>
             ) : null}
+
             {phase === "done" ? (
               <button
                 type="button"
@@ -414,10 +595,32 @@ export function App(): JSX.Element {
                 Close
               </button>
             ) : null}
-            {phase === "posting" ? (
+
+            {phase === "posting" && !busyPost ? null : phase === "posting" ? (
               <p style={{ margin: 0, fontSize: 13, color: "#94a3b8", textAlign: "center" }}>
                 Capturing session and handing off to automation…
               </p>
+            ) : null}
+
+            {/* Always-visible exit link so the user is never stuck */}
+            {phase !== "done" ? (
+              <button
+                type="button"
+                onClick={() => void leaveFlow()}
+                style={{
+                  marginTop: 10,
+                  width: "100%",
+                  border: "none",
+                  background: "none",
+                  color: "#64748b",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  padding: "4px 0",
+                  textDecoration: "underline",
+                }}
+              >
+                Cancel and close
+              </button>
             ) : null}
           </div>
         </div>

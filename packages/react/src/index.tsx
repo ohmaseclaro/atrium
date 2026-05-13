@@ -106,6 +106,18 @@ export type RemoteBrowserProps = {
    */
   fullScreen?: boolean;
   onExitFullScreen?: () => void;
+  /**
+   * Called whenever the internal WebSocket connection status changes.
+   * Useful for driving stage-aware loading copy in the host UI.
+   */
+  onStatusChange?: (status: "idle" | "connecting" | "live" | "reconnecting" | "ended") => void;
+  /**
+   * Controls the built-in "Connecting…" overlay shown while the WebSocket is
+   * establishing and while waiting for the first frame from the worker.
+   * - `"auto"` (default) — overlay is shown automatically.
+   * - `"none"` — disable; host UI is responsible for its own loading state.
+   */
+  connectingOverlay?: "auto" | "none";
 };
 
 export type RemoteBrowserHandle = {
@@ -173,10 +185,20 @@ export const RemoteBrowser = forwardRef<RemoteBrowserHandle, RemoteBrowserProps>
     const onTerminatedRef = useRef(props.onTerminated);
     const onWebAuthnRequestRef = useRef(props.onWebAuthnRequest);
     const onErrorRef = useRef(props.onError);
+    const onStatusChangeRef = useRef(props.onStatusChange);
     const webauthnNoticeRef = useRef(webauthnNotice);
     const [status, setStatus] = useState<"idle" | "connecting" | "live" | "reconnecting" | "ended">(
       "idle",
     );
+    const setStatusAndNotify = useCallback(
+      (next: "idle" | "connecting" | "live" | "reconnecting" | "ended") => {
+        setStatus(next);
+        onStatusChangeRef.current?.(next);
+      },
+      [],
+    );
+    /** True once the first JPEG frame has been painted — used to gate the connecting overlay. */
+    const [firstFrame, setFirstFrame] = useState(false);
     const [holder, setHolder] = useState<ControlHolder>("agent");
     const [viewport, setViewport] = useState({ w: 1280, h: 800 });
     const [tabs, setTabs] = useState<RemoteBrowserTab[]>([]);
@@ -196,6 +218,7 @@ export const RemoteBrowser = forwardRef<RemoteBrowserHandle, RemoteBrowserProps>
       onTerminatedRef.current = props.onTerminated;
       onWebAuthnRequestRef.current = props.onWebAuthnRequest;
       onErrorRef.current = props.onError;
+      onStatusChangeRef.current = props.onStatusChange;
       // Keep the toast preference in a ref so toggling it doesn't tear down the WebSocket
       // (the property only affects whether we render a toast; not connection lifecycle).
       webauthnNoticeRef.current = webauthnNotice;
@@ -204,6 +227,7 @@ export const RemoteBrowser = forwardRef<RemoteBrowserHandle, RemoteBrowserProps>
       props.onTerminated,
       props.onWebAuthnRequest,
       props.onError,
+      props.onStatusChange,
       webauthnNotice,
     ]);
 
@@ -226,7 +250,7 @@ export const RemoteBrowser = forwardRef<RemoteBrowserHandle, RemoteBrowserProps>
       const url = new URL(props.wsUrl);
       url.searchParams.set("token", props.viewerToken);
       const attempt = reconnectAttemptRef.current;
-      setStatus(attempt > 0 ? "reconnecting" : "connecting");
+      setStatusAndNotify(attempt > 0 ? "reconnecting" : "connecting");
       sessionEndedRef.current = false;
 
       if (attempt === 0) {
@@ -239,6 +263,7 @@ export const RemoteBrowser = forwardRef<RemoteBrowserHandle, RemoteBrowserProps>
         setRemoteFavicon(null);
         setRemoteLoading(false);
         setWebauthnToast(null);
+        setFirstFrame(false);
         if (webauthnToastTimerRef.current) {
           clearTimeout(webauthnToastTimerRef.current);
           webauthnToastTimerRef.current = null;
@@ -260,7 +285,7 @@ export const RemoteBrowser = forwardRef<RemoteBrowserHandle, RemoteBrowserProps>
             const msg = parseServerMessage(JSON.parse(ev.data));
             if (msg.t === "hello") {
               reconnectAttemptRef.current = 0;
-              setStatus("live");
+              setStatusAndNotify("live");
               setViewport({ w: msg.viewport.w, h: msg.viewport.h });
               setHolder(msg.control.holder);
               onControlChangeRef.current?.(msg.control.holder);
@@ -314,7 +339,7 @@ export const RemoteBrowser = forwardRef<RemoteBrowserHandle, RemoteBrowserProps>
             }
             if (msg.t === "bye") {
               sessionEndedRef.current = true;
-              setStatus("ended");
+              setStatusAndNotify("ended");
               onTerminatedRef.current?.(msg.reason);
             }
             if (msg.t === "clipboard" && msg.text) {
@@ -340,6 +365,7 @@ export const RemoteBrowser = forwardRef<RemoteBrowserHandle, RemoteBrowserProps>
           if (!canvas) return;
           const ctx = canvas.getContext("2d");
           if (!ctx) return;
+          setFirstFrame(true);
           const blob = new Blob([ev.data], { type: "image/jpeg" });
           const img = new Image();
           const objectUrl = URL.createObjectURL(blob);
@@ -397,7 +423,7 @@ export const RemoteBrowser = forwardRef<RemoteBrowserHandle, RemoteBrowserProps>
         reconnectAttemptRef.current += 1;
         const n = reconnectAttemptRef.current;
         if (n > 24) {
-          setStatus("ended");
+          setStatusAndNotify("ended");
           onErrorRef.current?.(new Error("reconnect_exhausted"));
           onTerminatedRef.current?.("reconnect_exhausted");
           return;
@@ -907,6 +933,47 @@ export const RemoteBrowser = forwardRef<RemoteBrowserHandle, RemoteBrowserProps>
               }}
             >
               Reconnecting…
+            </div>
+          ) : null}
+          {(props.connectingOverlay !== "none") &&
+          (status === "connecting" || status === "idle" || (status === "live" && !firstFrame)) ? (
+            <div
+              role="status"
+              aria-label="Connecting to remote browser"
+              style={{
+                position: "absolute",
+                inset: 0,
+                zIndex: 5,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 14,
+                background: "#0b0d12",
+              }}
+            >
+              <div
+                aria-hidden="true"
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: "50%",
+                  border: "3px solid rgba(148,163,184,0.2)",
+                  borderTopColor: "#38bdf8",
+                  animation: "atrium-spin 0.85s linear infinite",
+                }}
+              />
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  color: "#94a3b8",
+                  fontFamily: "system-ui, sans-serif",
+                }}
+              >
+                {status === "live" ? "Loading page…" : "Connecting to remote browser…"}
+              </p>
+              <style>{`@keyframes atrium-spin { to { transform: rotate(360deg); } }`}</style>
             </div>
           ) : null}
           {remoteLoading ? (

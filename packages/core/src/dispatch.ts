@@ -283,9 +283,18 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
       { method: "POST", body: { text: trimmed } },
     );
     if (!r.ok) {
-      const detail = await r.text();
-      return json(
-        { error: "worker_x_compose_failed", detail: detail.slice(0, 2000) },
+      // Parse the worker's typed error body and forward the error code directly
+      // so clients can react to specific conditions (session_expired, challenge, etc.)
+      let errorCode = "worker_x_compose_failed";
+      let errorMessage = "";
+      try {
+        const body = (await r.json()) as { error?: string; message?: string };
+        if (typeof body.error === "string" && body.error) errorCode = body.error;
+        if (typeof body.message === "string") errorMessage = body.message;
+      } catch {
+        errorMessage = await r.text().catch(() => "").then((t) => t.slice(0, 2000));
+      }
+      const statusCode =
         r.status === 404
           ? 404
           : r.status === 409
@@ -294,8 +303,8 @@ export async function dispatchAtrium(ctx: DispatchCtx): Promise<Response> {
               ? 400
               : r.status === 501
                 ? 501
-                : 502,
-      );
+                : 502;
+      return json({ error: errorCode, message: errorMessage }, statusCode);
     }
     return text(204);
   }

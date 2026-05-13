@@ -148,6 +148,7 @@ describe("RemoteBrowser", () => {
         sessionId="sid"
         viewerToken="tok"
         wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
+        connectingOverlay="none"
       />,
     );
 
@@ -244,6 +245,7 @@ describe("RemoteBrowser", () => {
         sessionId="sid"
         viewerToken="tok"
         wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
+        connectingOverlay="none"
       />,
     );
 
@@ -398,6 +400,7 @@ describe("RemoteBrowser", () => {
         viewerToken="tok"
         wsUrl="ws://127.0.0.1:1/atrium/sessions/sid/stream"
         webauthnNotice={false}
+        connectingOverlay="none"
         onWebAuthnRequest={(req) => seen.push(req.rpId ?? "")}
       />,
     );

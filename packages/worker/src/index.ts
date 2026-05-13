@@ -234,28 +234,173 @@ function parseBootstrapPayload(raw: unknown): PendingBootstrap | null {
   return out;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// X demo compose — typed errors + post-confirmation
+// ──────────────────────────────────────────────────────────────────────────────
+
+export class XComposeError extends Error {
+  constructor(
+    public readonly code:
+      | "x_session_expired"
+      | "x_challenge_required"
+      | "x_rate_limited"
+      | "x_post_failed"
+      | "x_timeout",
+    message: string,
+  ) {
+    super(message);
+    this.name = "XComposeError";
+  }
+}
+
+function isXLoginUrl(url: string): boolean {
+  return /x\.com\/(i\/flow\/login|login)|twitter\.com\/login/.test(url);
+}
+
+function isXChallengeUrl(url: string): boolean {
+  return (
+    /x\.com\/(account\/access|i\/flow\/challenge|i\/access_challenge)/.test(url) ||
+    url.includes("arkose") ||
+    url.includes("challenge_type")
+  );
+}
+
+/**
+ * Races success signals (editor disappears / URL leaves /compose) against a
+ * failure poller (challenge / login redirect / rate limit / timeout).
+ * Throws a typed XComposeError on any failure path.
+ */
+async function waitForXPostConfirmation(
+  page: Page,
+  editorLocator: ReturnType<Page["locator"]>,
+  timeoutMs: number,
+): Promise<void> {
+  const POLL_MS = 900;
+  const deadline = Date.now() + timeoutMs;
+  let settled = false;
+
+  await new Promise<void>((resolve, reject) => {
+    const finish = (err?: unknown) => {
+      if (settled) return;
+      settled = true;
+      if (err) reject(err);
+      else resolve();
+    };
+
+    // ── success: compose textarea disappears ──────────────────────
+    editorLocator
+      .first()
+      .waitFor({ state: "hidden", timeout: timeoutMs })
+      .then(() => finish(), () => { /* handled by poller timeout */ });
+
+    // ── success: URL leaves /compose ─────────────────────────────
+    page
+      .waitForURL((u: URL) => !u.pathname.startsWith("/compose"), { timeout: timeoutMs })
+      .then(() => finish(), () => { /* handled by poller timeout */ });
+
+    // ── failure poller ────────────────────────────────────────────
+    void (async () => {
+      while (!settled && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, POLL_MS));
+        if (settled) return;
+        const url = page.url();
+        if (isXLoginUrl(url)) {
+          finish(
+            new XComposeError("x_session_expired", `Redirected to login after posting (${url})`),
+          );
+          return;
+        }
+        if (isXChallengeUrl(url)) {
+          finish(
+            new XComposeError("x_challenge_required", `Challenge page after posting (${url})`),
+          );
+          return;
+        }
+      }
+      if (!settled) {
+        const url = page.url();
+        const toast = await page
+          .locator('[data-testid="toast"]')
+          .first()
+          .textContent({ timeout: 500 })
+          .catch(() => "");
+        if (/unable to send|whoa there|slow down/i.test(toast ?? "")) {
+          finish(new XComposeError("x_rate_limited", `Rate limited: ${toast}`));
+        } else {
+          finish(
+            new XComposeError(
+              "x_timeout",
+              `Post not confirmed within ${timeoutMs}ms. URL: ${url}`,
+            ),
+          );
+        }
+      }
+    })();
+  });
+
+  // Final URL check after a success signal — catch a challenge redirect that
+  // fired right as the editor closed.
+  const finalUrl = page.url();
+  if (isXLoginUrl(finalUrl)) {
+    throw new XComposeError(
+      "x_session_expired",
+      `Session expired immediately after post (${finalUrl})`,
+    );
+  }
+  if (isXChallengeUrl(finalUrl)) {
+    throw new XComposeError(
+      "x_challenge_required",
+      `Challenge shown immediately after post (${finalUrl})`,
+    );
+  }
+}
+
 /**
  * X (Twitter) compose flow — best-effort selectors; the UI changes frequently.
  * Caller must ensure `live.control.holder === "agent"`.
+ * Throws XComposeError with a typed `code` on every verifiable failure path.
  */
 async function runXComposeTweet(live: LiveSession, text: string): Promise<void> {
   const page = live.page;
+
+  // Navigate to compose
   await page.goto("https://x.com/compose/post", {
     waitUntil: "domcontentloaded",
-    timeout: 90_000,
+    timeout: 30_000,
   });
+
+  // Verify we landed on the compose page, not a login / challenge interstitial
+  const postNavUrl = page.url();
+  if (isXLoginUrl(postNavUrl)) {
+    throw new XComposeError(
+      "x_session_expired",
+      `X session expired — redirected to login (${postNavUrl})`,
+    );
+  }
+  if (isXChallengeUrl(postNavUrl)) {
+    throw new XComposeError(
+      "x_challenge_required",
+      `X requires extra verification before composing (${postNavUrl})`,
+    );
+  }
+
   const editor = page
     .locator('[data-testid="tweetTextarea_0"]')
     .or(page.locator('div[role="textbox"][data-testid^="tweetTextarea"]'))
     .or(page.locator('div[role="textbox"][contenteditable="true"]').first());
-  await editor.first().waitFor({ state: "visible", timeout: 90_000 });
+
+  await editor.first().waitFor({ state: "visible", timeout: 30_000 });
   await editor.first().click({ timeout: 15_000 });
   await page.keyboard.type(text, { delay: 12 });
   await new Promise((r) => setTimeout(r, 400));
-  await page
-    .locator('[data-testid="tweetButton"]:not([disabled])')
-    .first()
-    .click({ timeout: 45_000 });
+
+  // Wait for the tweet button to be enabled, then click
+  const tweetBtn = page.locator('[data-testid="tweetButton"]:not([disabled])').first();
+  await tweetBtn.waitFor({ state: "visible", timeout: 10_000 });
+  await tweetBtn.click({ timeout: 15_000 });
+
+  // Confirm the post actually went through — throws on failure / timeout
+  await waitForXPostConfirmation(page, editor, 30_000);
 }
 
 function mouseButtonFromPayload(v: unknown): "left" | "right" | "middle" {
@@ -756,10 +901,16 @@ async function handleInternalHttp(
     try {
       await runXComposeTweet(live, trimmed);
     } catch (e) {
-      writeJson(res, 500, {
-        error: "x_compose_failed",
-        message: e instanceof Error ? e.message : "unknown",
-      });
+      if (e instanceof XComposeError) {
+        const status =
+          e.code === "x_session_expired" || e.code === "x_challenge_required" ? 409 : 500;
+        writeJson(res, status, { error: e.code, message: e.message });
+      } else {
+        writeJson(res, 500, {
+          error: "x_compose_failed",
+          message: e instanceof Error ? e.message : "unknown",
+        });
+      }
       return true;
     }
     res.writeHead(204);
