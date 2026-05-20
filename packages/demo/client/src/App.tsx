@@ -52,7 +52,6 @@ function fetchWithTimeout(input: string, init: RequestInit, timeoutMs: number): 
 }
 
 export function App(): JSX.Element {
-  const fullscreenRootRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<SessionPayload | null>(null);
   const flowActiveRef = useRef(false);
   const startGuardRef = useRef(false); // prevents double-click race on the start button
@@ -88,9 +87,6 @@ export function App(): JSX.Element {
       startGuardRef.current = false;
       const s = sessionRef.current;
       sessionRef.current = null;
-      if (document.fullscreenElement) {
-        await document.exitFullscreen?.().catch(() => undefined);
-      }
       if (s) await destroySession(s);
       setSession(null);
       setFlowOpen(false);
@@ -100,25 +96,6 @@ export function App(): JSX.Element {
     },
     [destroySession],
   );
-
-  // Exit fullscreen = leave flow (only while flow is active)
-  useEffect(() => {
-    const onFsChange = () => {
-      if (document.fullscreenElement != null) return;
-      if (!flowActiveRef.current) return;
-      flowActiveRef.current = false;
-      const s = sessionRef.current;
-      sessionRef.current = null;
-      if (s) void destroySession(s);
-      setSession(null);
-      setFlowOpen(false);
-      setPhase("tweet");
-      setBrowserStatus("idle");
-      setError(null);
-    };
-    document.addEventListener("fullscreenchange", onFsChange);
-    return () => document.removeEventListener("fullscreenchange", onFsChange);
-  }, [destroySession]);
 
   // Best-effort session cleanup on page unload
   useEffect(() => {
@@ -177,10 +154,6 @@ export function App(): JSX.Element {
       setFlowOpen(true);
       setPhase("starting");
     });
-    const el = fullscreenRootRef.current;
-    if (el) {
-      void el.requestFullscreen?.().catch(() => undefined);
-    }
 
     void (async () => {
       setBusyStart(true);
@@ -343,8 +316,8 @@ export function App(): JSX.Element {
             Post from a remote browser
           </h1>
           <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.55, color: "#cbd5e1" }}>
-            One flow: we open X for you in fullscreen, you sign in, then we capture the session and
-            send this tweet while you watch.
+            One flow: we open X for you in a full-viewport overlay, you sign in, then we capture the
+            session and send this tweet while you watch.
           </p>
         </header>
 
@@ -413,7 +386,6 @@ export function App(): JSX.Element {
 
       {flowOpen ? (
         <div
-          ref={fullscreenRootRef}
           style={{
             position: "fixed",
             inset: 0,
