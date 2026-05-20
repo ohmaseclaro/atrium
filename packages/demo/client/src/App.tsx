@@ -55,6 +55,11 @@ export function App(): JSX.Element {
   const sessionRef = useRef<SessionPayload | null>(null);
   const flowActiveRef = useRef(false);
   const startGuardRef = useRef(false); // prevents double-click race on the start button
+  /**
+   * Mirror of `phase` state kept in a ref so event callbacks (onTerminated) can
+   * read the current phase without capturing a stale closure value.
+   */
+  const phaseRef = useRef<FlowPhase>("tweet");
 
   const [flowOpen, setFlowOpen] = useState(false);
   const [phase, setPhase] = useState<FlowPhase>("tweet");
@@ -67,6 +72,12 @@ export function App(): JSX.Element {
   const [browserStatus, setBrowserStatus] = useState<
     "idle" | "connecting" | "live" | "reconnecting" | "ended"
   >("idle");
+
+  /** Keep phaseRef in sync so callbacks always see the current phase. */
+  const setPhaseTracked = useCallback((p: FlowPhase) => {
+    phaseRef.current = p;
+    setPhase(p);
+  }, []);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -90,11 +101,11 @@ export function App(): JSX.Element {
       if (s) await destroySession(s);
       setSession(null);
       setFlowOpen(false);
-      setPhase("tweet");
+      setPhaseTracked("tweet");
       setBrowserStatus("idle");
       if (!opts?.preserveError) setError(null);
     },
-    [destroySession],
+    [destroySession, setPhaseTracked],
   );
 
   // Best-effort session cleanup on page unload
@@ -152,7 +163,7 @@ export function App(): JSX.Element {
     flowActiveRef.current = true;
     flushSync(() => {
       setFlowOpen(true);
-      setPhase("starting");
+      setPhaseTracked("starting");
     });
 
     void (async () => {
@@ -170,13 +181,15 @@ export function App(): JSX.Element {
         if (!res.ok) {
           const body = await res.text();
           if (res.status === 429)
-            throw new Error("Too many sessions open - please wait a moment and try again.");
+            throw new Error(
+              "All demo browser slots are in use right now — please wait a moment and try again.",
+            );
           throw new Error(`HTTP ${res.status}: ${body}`);
         }
         const data = (await res.json()) as SessionPayload;
         setSession(data);
         await grantHuman(data);
-        setPhase("login");
+        setPhaseTracked("login");
       } catch (e) {
         const msg =
           e instanceof Error && e.name === "AbortError"
@@ -189,7 +202,7 @@ export function App(): JSX.Element {
         startGuardRef.current = false;
       }
     })();
-  }, [grantHuman, leaveFlow]);
+  }, [grantHuman, leaveFlow, setPhaseTracked]);
 
   const finishLoginAndTweet = useCallback(async () => {
     const s = sessionRef.current;
@@ -207,7 +220,7 @@ export function App(): JSX.Element {
         throw new Error(`Session snapshot failed: HTTP ${snap.status}: ${snapText.slice(0, 800)}`);
       }
 
-      setPhase("posting");
+      setPhaseTracked("posting");
       await releaseAgent(s);
 
       const compose = await fetchWithTimeout(
@@ -234,7 +247,17 @@ export function App(): JSX.Element {
           syntheticErr.message = `${errorCode ?? "compose_failed"}: ${errorMessage}`;
         throw syntheticErr;
       }
-      setPhase("done");
+
+      // ── Success: tweet sent ───────────────────────────────────────────────────
+      // Immediately free the server-side session so the browser slot is returned
+      // to the pool without waiting for the user to click "Close".  We null-out
+      // sessionRef first so leaveFlow / onTerminated don't double-delete.
+      // The RemoteBrowser will receive a WS "bye" and show "ended", but the
+      // "done" overlay (guarded by phaseRef) keeps the UX intact.
+      const doneSession = sessionRef.current;
+      sessionRef.current = null;
+      setPhaseTracked("done");
+      if (doneSession) void destroySession(doneSession);
     } catch (e) {
       const msg =
         e instanceof Error && e.name === "AbortError"
@@ -242,11 +265,11 @@ export function App(): JSX.Element {
           : friendlyError(e);
       setError(msg);
       // Keep the modal open so the user can retry or close manually
-      setPhase("login");
+      setPhaseTracked("login");
     } finally {
       setBusyPost(false);
     }
-  }, [releaseAgent, tweetDraft]);
+  }, [destroySession, releaseAgent, setPhaseTracked, tweetDraft]);
 
   // ── floating hint copy ──────────────────────────────────────────────────────
   const floatingHint = (() => {
@@ -416,7 +439,11 @@ export function App(): JSX.Element {
                 connectingOverlay="none" // demo owns the loading state via onStatusChange
                 onStatusChange={setBrowserStatus}
                 onExitFullScreen={() => void leaveFlow()}
-                onTerminated={() => void leaveFlow()}
+                onTerminated={() => {
+                  // In "done" phase we already freed the session; the "bye" WS
+                  // message is expected — don't tear down the confirmation screen.
+                  if (phaseRef.current !== "done") void leaveFlow();
+                }}
                 style={{ flex: 1, minHeight: 0 }}
               />
             </div>

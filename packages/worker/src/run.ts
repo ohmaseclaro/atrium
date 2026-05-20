@@ -10,12 +10,20 @@ const headless = process.env.ATRIUM_WORKER_HEADLESS === "1";
 const enableXDemoCompose =
   process.env.ATRIUM_X_DEMO_COMPOSE === "1" || process.env.ATRIUM_X_DEMO_COMPOSE === "true";
 
+// Default transport idle to 3 minutes so a viewer WebSocket drop (tab close,
+// network blip) doesn't leave Chromium running indefinitely.  The explicit
+// DELETE from the demo client is the primary cleanup path; this is the fallback.
+const transportIdleMs = process.env.ATRIUM_TRANSPORT_IDLE_MS
+  ? Number(process.env.ATRIUM_TRANSPORT_IDLE_MS)
+  : 3 * 60_000;
+
 const server = await startWorkerServer({
   port,
   sharedSecret,
   dryRun,
   headless,
   enableXDemoCompose,
+  transportIdleMs,
 });
 console.log(
   `[atrium-worker] listening on ${port} dryRun=${dryRun} headless=${headless} xDemoCompose=${enableXDemoCompose}`,

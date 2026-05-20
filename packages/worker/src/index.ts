@@ -245,7 +245,8 @@ export class XComposeError extends Error {
       | "x_challenge_required"
       | "x_rate_limited"
       | "x_post_failed"
-      | "x_timeout",
+      | "x_timeout"
+      | "x_compose_failed",
     message: string,
   ) {
     super(message);
@@ -268,6 +269,13 @@ function isXChallengeUrl(url: string): boolean {
 /**
  * Races success signals (editor disappears / URL leaves /compose) against a
  * failure poller (challenge / login redirect / rate limit / timeout).
+ *
+ * IMPORTANT: `waitForURL` resolves immediately if the current URL already
+ * satisfies the predicate.  We therefore only register the URL watcher when
+ * we are genuinely at a /compose path at the start of this call; if the page
+ * is already at /home the watcher would fire instantly and produce a false
+ * positive.
+ *
  * Throws a typed XComposeError on any failure path.
  */
 async function waitForXPostConfirmation(
@@ -278,6 +286,10 @@ async function waitForXPostConfirmation(
   const POLL_MS = 900;
   const deadline = Date.now() + timeoutMs;
   let settled = false;
+
+  // Only use URL navigation as a success signal when we actually started at
+  // /compose — otherwise waitForURL resolves immediately (false positive).
+  const startedAtCompose = page.url().includes("/compose");
 
   await new Promise<void>((resolve, reject) => {
     const finish = (err?: unknown) => {
@@ -298,15 +310,17 @@ async function waitForXPostConfirmation(
         },
       );
 
-    // ── success: URL leaves /compose ─────────────────────────────
-    page
-      .waitForURL((u: URL) => !u.pathname.startsWith("/compose"), { timeout: timeoutMs })
-      .then(
-        () => finish(),
-        () => {
-          /* handled by poller timeout */
-        },
-      );
+    // ── success: URL leaves /compose (only if we started there) ──
+    if (startedAtCompose) {
+      page
+        .waitForURL((u: URL) => !u.pathname.startsWith("/compose"), { timeout: timeoutMs })
+        .then(
+          () => finish(),
+          () => {
+            /* handled by poller timeout */
+          },
+        );
+    }
 
     // ── failure poller ────────────────────────────────────────────
     void (async () => {
@@ -324,6 +338,16 @@ async function waitForXPostConfirmation(
           finish(
             new XComposeError("x_challenge_required", `Challenge page after posting (${url})`),
           );
+          return;
+        }
+        // Check for visible error toasts from X (rate limit, content policy, etc.)
+        const toast = await page
+          .locator('[data-testid="toast"]')
+          .first()
+          .textContent({ timeout: 300 })
+          .catch(() => "");
+        if (/unable to send|whoa there|slow down|something went wrong/i.test(toast ?? "")) {
+          finish(new XComposeError("x_rate_limited", `X error toast: ${toast}`));
           return;
         }
       }
@@ -376,7 +400,19 @@ async function runXComposeTweet(live: LiveSession, text: string): Promise<void> 
     timeout: 30_000,
   });
 
-  // Verify we landed on the compose page, not a login / challenge interstitial
+  // X is a SPA — the initial HTML load can briefly show a different URL before
+  // the client router activates.  Wait a moment for the URL to settle at /compose
+  // (or a known error destination like login/challenge).
+  await page
+    .waitForURL(
+      (u: URL) =>
+        u.pathname.startsWith("/compose") || isXLoginUrl(u.href) || isXChallengeUrl(u.href),
+      { timeout: 5_000 },
+    )
+    .catch(() => undefined); // if it times out we check the URL explicitly below
+
+  // Verify we landed on the compose page, not a login / challenge interstitial,
+  // and not silently redirected to /home (which would cause a false-positive post).
   const postNavUrl = page.url();
   if (isXLoginUrl(postNavUrl)) {
     throw new XComposeError(
@@ -390,11 +426,19 @@ async function runXComposeTweet(live: LiveSession, text: string): Promise<void> 
       `X requires extra verification before composing (${postNavUrl})`,
     );
   }
+  if (!postNavUrl.includes("/compose")) {
+    // Redirected to an unexpected page (e.g. /home) — treat as session issue.
+    throw new XComposeError(
+      "x_compose_failed",
+      `Expected /compose but X redirected to ${postNavUrl} — session may be invalid`,
+    );
+  }
 
+  // Use only compose-specific selectors; avoid the broad div[role="textbox"]
+  // fallback which can match the home-feed compose box and produce a false positive.
   const editor = page
     .locator('[data-testid="tweetTextarea_0"]')
-    .or(page.locator('div[role="textbox"][data-testid^="tweetTextarea"]'))
-    .or(page.locator('div[role="textbox"][contenteditable="true"]').first());
+    .or(page.locator('div[role="textbox"][data-testid^="tweetTextarea"]'));
 
   await editor.first().waitFor({ state: "visible", timeout: 30_000 });
   await editor.first().click({ timeout: 15_000 });

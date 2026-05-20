@@ -20,7 +20,15 @@ export function createAtriumDemoApp(): AtriumDemoApp {
   const workerSharedSecret = process.env.ATRIUM_WORKER_SECRET ?? DEFAULT_SECRET;
 
   const { router, handleViewerUpgrade } = atrium({
-    authorize: async (_req: Request) => ({ tenantId: "demo", userId: "demo-user" }),
+    // Derive a per-visitor tenant from IP so each visitor has their own session
+    // slot budget and one misbehaving client can't exhaust the shared pool.
+    authorize: async (req: Request) => {
+      const ip =
+        (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
+        req.ip ??
+        "unknown";
+      return { tenantId: `demo:${ip}`, userId: "demo-user" };
+    },
     ...(process.env.ATRIUM_PUBLIC_BASE_URL?.trim()
       ? { publicBaseUrl: process.env.ATRIUM_PUBLIC_BASE_URL.trim() }
       : {}),
@@ -30,8 +38,12 @@ export function createAtriumDemoApp(): AtriumDemoApp {
       : {}),
     policies: {
       sessionTtlMs: 15 * 60_000,
-      idleTtlMs: 5 * 60_000,
-      maxConcurrentSessionsPerTenant: 5,
+      // Aggressively evict idle sessions so stale browsers don't occupy slots.
+      // The demo flow frees the session explicitly on success; this is the safety
+      // net for abandonment (tab close, navigation away without clicking Close).
+      idleTtlMs: 2 * 60_000,
+      // Per-IP budget: one user should never need more than 2 concurrent sessions.
+      maxConcurrentSessionsPerTenant: 2,
       urlAllowlist: ["*"],
       defaultViewport: { w: 1280, h: 800 },
     },
